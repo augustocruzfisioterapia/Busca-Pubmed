@@ -1,0 +1,9 @@
+{
+  "name": "Busca Cientifica PubMed",
+  "short_name": "Busca PubMed",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f1eb",
+  "theme_color": "#10231f",
+  "icons": []
+}

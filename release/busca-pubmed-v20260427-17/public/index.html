@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#13332d">
+    <title>Busca Avançada de Evidências Científicas na Pubmed</title>
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="stylesheet" href="/styles.css?v=20260427-17">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="hero">
+        <nav class="nav-bar" aria-label="Principal">
+          <div class="brand">
+            <div class="brand-mark" aria-hidden="true">
+              <svg viewBox="0 0 42 42" role="img" focusable="false">
+                <circle cx="21" cy="21" r="18" class="logo-ring"></circle>
+                <path class="logo-leaf" d="M22.5 27.8c6.1-.7 10.2-5.2 10.6-11.6-6.6-.1-11.1 3.7-12.2 9.8 2.5-2.8 5.3-4.8 8.6-6.1-3.2 2.1-5.8 4.8-7 7.9Z"></path>
+                <path class="logo-pulse" d="M8.8 23.1h6.1l2.4-5.9 4.2 12.1 2.2-6.2h9.5"></path>
+              </svg>
+            </div>
+            <div>
+              <strong>Busca PubMed</strong>
+              <span>evidência clínica auditável</span>
+            </div>
+          </div>
+          <div class="nav-actions">
+            <button id="home-button" type="button">Home</button>
+          </div>
+        </nav>
+
+        <section class="search-card" aria-label="Busca de artigos">
+          <div class="search-copy">
+            <h1>Busca Avançada de Evidências Científicas na Pubmed</h1>
+          </div>
+
+          <form id="search-form" class="search-form">
+            <label class="main-search">
+              Termos da busca
+              <textarea
+                id="searchText"
+                name="searchText"
+                rows="5"
+                placeholder='Evite ao máximo usar siglas, isto pode impedir a busca da literatura científica.'
+                autofocus
+              ></textarea>
+            </label>
+
+            <div class="search-controls">
+              <button class="primary-button" type="submit">Buscar</button>
+              <button class="secondary-button" id="load-example" type="button">Exemplo</button>
+            </div>
+
+            <details class="advanced">
+              <summary>Opções avançadas</summary>
+              <div class="advanced-grid">
+                <label>
+                  Query PubMed manual
+                  <textarea
+                    id="structuredQuery"
+                    name="structuredQuery"
+                    rows="4"
+                    placeholder='("Early Ambulation"[MeSH Terms] OR "early mobilization"[Title/Abstract])'
+                  ></textarea>
+                </label>
+                <div class="field-grid compact">
+                  <label>
+                    Operador
+                    <select id="conceptOperator" name="conceptOperator">
+                      <option value="AND" selected>AND</option>
+                      <option value="OR">OR</option>
+                    </select>
+                  </label>
+                  <label>
+                    Artigos
+                    <input id="maxResults" name="maxResults" type="number" min="1" max="25" value="8">
+                  </label>
+                </div>
+                <div class="field-grid">
+                  <label>
+                    E-mail Unpaywall
+                    <input id="unpaywallEmail" name="unpaywallEmail" type="email" placeholder="opcional">
+                  </label>
+                </div>
+                <div class="switch-row">
+                  <label class="switch">
+                    <input id="prioritizeEvidence" name="prioritizeEvidence" type="checkbox" checked>
+                    <span>Priorizar revisões, meta-análises e ensaios clínicos</span>
+                  </label>
+                  <label class="switch">
+                    <input id="applyClinicalFilter" name="applyClinicalFilter" type="checkbox">
+                    <span>Aplicar filtro humano/idioma</span>
+                  </label>
+                </div>
+              </div>
+            </details>
+          </form>
+        </section>
+      </header>
+
+      <main class="workspace">
+        <section class="status-panel" id="status-panel">
+          <div>
+            <strong>Pronto para buscar</strong>
+            <p>Digite os termos principais e inicie a busca.</p>
+          </div>
+        </section>
+
+        <section class="query-panel" id="query-panel" hidden>
+          <div class="panel-heading">
+            <h2>Interpretação e query</h2>
+            <button id="copy-query" type="button">Copiar query</button>
+          </div>
+          <pre id="query-output"></pre>
+        </section>
+
+        <section class="validation-grid" id="validation-grid" hidden></section>
+        <section class="results" id="results" aria-live="polite"></section>
+      </main>
+      <footer class="site-footer">
+        Desenvolvido por Augusto Cruz - Fisioterapeuta Intensivista
+        <a href="https://instagram.com/augustocruzfisioterapia" target="_blank" rel="noreferrer">@augustocruzfisioterapia</a>
+      </footer>
+    </div>
+
+    <template id="article-template">
+      <article class="article">
+        <div class="article-main">
+          <div class="article-meta"></div>
+          <h2></h2>
+          <dl class="study-data"></dl>
+          <div class="description">
+            <h3>Resultado principal</h3>
+            <p class="main-result"></p>
+            <h3>Conclusão</h3>
+            <p class="conclusion"></p>
+            <p class="source"></p>
+          </div>
+        </div>
+        <aside class="article-side">
+          <a class="pubmed-link" rel="noreferrer">PubMed</a>
+          <a class="pdf-link" rel="noreferrer" hidden>PDF PMC</a>
+          <div class="pdf-status"></div>
+          <details>
+            <summary>Auditoria PDF</summary>
+            <ol class="attempts"></ol>
+          </details>
+        </aside>
+      </article>
+    </template>
+
+    <script>
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.getRegistrations()
+          .then((registrations) => registrations.forEach((registration) => registration.unregister()))
+          .catch(() => {});
+      }
+    </script>
+    <script src="/app.js?v=20260427-17" type="module"></script>
+  </body>
+</html>

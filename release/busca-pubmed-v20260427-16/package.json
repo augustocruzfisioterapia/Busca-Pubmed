@@ -1,0 +1,15 @@
+{
+  "name": "article-evidence-search",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Aplicacao local/PWA para busca rigorosa de artigos no PubMed com auditoria de PDF e extracao cientifica.",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js && node --check src/core/extractors.mjs && node --check src/core/onlineTermResolver.mjs && node --check src/core/pdfResolver.mjs && node --check src/core/pipeline.mjs && node --check src/core/pubmedClient.mjs && node --check src/core/queryBuilder.mjs && node --check src/core/termResolver.mjs && node --check src/core/validation.mjs && node --check public/app.js",
+    "test": "node test/core.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

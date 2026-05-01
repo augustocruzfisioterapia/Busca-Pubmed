@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: busca-pubmed
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: NCBI_TOOL
+        value: BuscaPubMed
+      - key: RATE_LIMIT_WINDOW_MS
+        value: 60000
+      - key: RATE_LIMIT_MAX
+        value: 20
+      - key: MAX_BODY_SIZE
+        value: 1000000
+      - key: OPENAI_MODEL
+        value: gpt-4.1-mini
+      - key: OPENAI_TIMEOUT_MS
+        value: 45000
+      - key: NCBI_EMAIL
+        sync: false
+      - key: NCBI_API_KEY
+        sync: false
+      - key: UNPAYWALL_EMAIL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
