@@ -529,6 +529,12 @@ test("buildEvidenceDiscussionPrompt inclui regras cientificas obrigatorias", () 
   assert.match(prompt, /## 4\./);
   assert.match(prompt, /Nao invente informacoes ausentes/);
   assert.match(prompt, /Nao afirme conclusoes absolutas/);
+  assert.match(prompt, /Nao adicione, cite ou sugira estudos externos/);
+  assert.match(prompt, /Nao realize buscas adicionais nem use ferramentas externas/);
+  assert.match(prompt, /nenhuma nova fonte foi incluida/);
+  assert.match(prompt, /Todas as conclusoes devem derivar diretamente/);
+  assert.match(prompt, /Os dados disponiveis sao limitados para uma conclusao robusta/);
+  assert.match(prompt, /concordancia, divergencia e qualidade metodologica/);
   assert.match(prompt, /Sempre inclua limitacoes e vieses/);
   assert.match(prompt, /Diferencie desfechos clinicos de desfechos substitutos/);
   assert.match(prompt, /PMID: 11/);
@@ -562,7 +568,7 @@ test("runEvidenceDiscussion chama Responses API com artigos retornados pela busc
 
   assert.equal(capturedUrl, "https://api.openai.com/v1/responses");
   assert.equal(capturedBody.model, "test-model");
-  assert.match(capturedBody.instructions, /Use somente os artigos fornecidos/);
+  assert.match(capturedBody.instructions, /Use exclusivamente os artigos fornecidos/);
   assert.match(capturedBody.input, /PMID: 99/);
   assert.match(capturedBody.input, /Tamanho amostral identificado: 120/);
   assert.equal(result.selectedCount, 1);

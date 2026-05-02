@@ -12,10 +12,18 @@ const MODE_GUIDANCE = {
 };
 
 const SCIENTIFIC_GUARDRAILS = [
-  "Use somente os artigos fornecidos.",
+  "Use exclusivamente os artigos fornecidos na entrada.",
+  "Nao adicione, cite ou sugira estudos externos.",
+  "Nao realize buscas adicionais nem use ferramentas externas.",
+  "Nao utilize conhecimento fora dos abstracts e metadados fornecidos.",
   "Nao invente informacoes ausentes.",
   "Nao afirme conclusoes absolutas.",
+  "Nao use expressoes vagas como 'a literatura mostra' ou 'estudos demonstram' sem referencia direta aos artigos fornecidos.",
+  "Todas as conclusoes devem derivar diretamente dos abstracts e metadados fornecidos.",
   "Use linguagem cautelosa: sugere, foi associado, os dados indicam, entre os estudos fornecidos.",
+  "Declare claramente que a analise e baseada apenas nos artigos fornecidos e que nenhuma nova fonte foi incluida.",
+  "Se os dados forem insuficientes, inclua a frase: Os dados disponiveis sao limitados para uma conclusao robusta.",
+  "Realize comparacao entre os estudos quando possivel: concordancia, divergencia e qualidade metodologica.",
   "Sempre inclua limitacoes e vieses.",
   "Priorize Meta-Analysis > Systematic Review > Randomized Controlled Trial > outros.",
   "Considere tamanho amostral quando informado no abstract.",
@@ -107,6 +115,8 @@ export function buildEvidenceDiscussionPrompt({ mode, query, articles }) {
     "## 4. Limitações e vieses",
     "## 5. Aplicabilidade",
     "",
+    "Referencia dos estudos: use preferencialmente Estudo 1, Estudo 2 etc. e inclua PMIDs quando fizer afirmacoes especificas.",
+    "Declare no inicio que a analise usa apenas os artigos fornecidos e nao inclui novas fontes.",
     "Em cada secao, cite PMIDs quando fizer afirmacoes especificas.",
     "Na secao de limitacoes, inclua obrigatoriamente limitacoes dos abstracts, tamanho amostral ausente/pequeno quando aplicavel, desenho dos estudos e risco de extrapolacao.",
     "",

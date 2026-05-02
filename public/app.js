@@ -24,7 +24,6 @@ const closeDiscussionButton = document.querySelector("#close-discussion");
 const discussionModeButtons = [...document.querySelectorAll(".discussion-modes button")];
 const discussionPlaceholder = document.querySelector("#discussion-placeholder");
 const discussionResult = document.querySelector("#discussion-result");
-const copyDiscussionButton = document.querySelector("#copy-discussion");
 const queryBuilderRows = document.querySelector("#query-builder-rows");
 const addQueryRowButton = document.querySelector("#add-query-row");
 const advancedQueryWarning = document.querySelector("#advanced-query-warning");
@@ -39,6 +38,7 @@ let currentView = "recommended";
 let targetResultCount = 10;
 let advancedTerms = [];
 let advancedTermId = 0;
+let discussionInFlight = false;
 const RETURN_RESTORE_KEY = "article-search-returning";
 const SETTINGS_VERSION = 4;
 const configuredApiBase = normalizeApiBase(window.BUSCA_PUBMED_API_BASE || "");
@@ -305,7 +305,7 @@ loadMoreButton?.addEventListener("click", async () => {
 discussEvidenceButton?.addEventListener("click", () => {
   if (!currentResult?.articles?.length) return;
   discussionPanel.hidden = false;
-  resetDiscussionPanel();
+  renderDiscussionStack();
 });
 
 closeDiscussionButton?.addEventListener("click", () => {
@@ -321,16 +321,6 @@ discussionModeButtons.forEach((button) => {
     discussionModeButtons.forEach((item) => item.classList.toggle("active", item === button));
     await requestEvidenceDiscussion(button.dataset.mode || "Clinico");
   });
-});
-
-copyDiscussionButton?.addEventListener("click", async () => {
-  const text = currentResult?.discussion?.analysisMarkdown || "";
-  if (!text) return;
-  const copied = await copyText(text);
-  copyDiscussionButton.textContent = copied ? "Resultado copiado." : "Não foi possível copiar.";
-  setTimeout(() => {
-    copyDiscussionButton.textContent = "Copiar resultado";
-  }, 1400);
 });
 
 async function formPayload() {
@@ -448,15 +438,28 @@ async function requestSearchUntilTarget(payload, targetTotal) {
 }
 
 async function requestEvidenceDiscussion(mode) {
-  if (!currentResult?.articles?.length) return;
+  if (!currentResult?.articles?.length || discussionInFlight) return;
 
-  setDiscussionBusy(true, "Analisando evidências...", "A IA está revisando até 20 artigos, priorizando meta-análises, revisões sistemáticas e RCTs.");
+  ensureDiscussionState();
+  const articles = uniqueArticles(currentResult.articles || []).map(serializeArticleForDiscussion);
+  const signature = createDiscussionSignature(mode, articles);
+  const existing = currentResult.discussions.find((item) => item.signature === signature);
+  if (existing) {
+    renderDiscussionStack({
+      notice: "Esta análise já foi gerada para esta busca.",
+      highlightSignature: signature
+    });
+    return;
+  }
+
+  discussionInFlight = true;
+  setDiscussionBusy(true, "Gerando análise...", "A IA está revisando até 20 artigos, priorizando meta-análises, revisões sistemáticas e RCTs.");
   try {
     // Envia somente dados recuperados na busca atual; o backend aplica a selecao e as regras anti-extrapolacao.
     const payload = {
       mode,
       query: queryToCopy(currentResult.query),
-      articles: uniqueArticles(currentResult.articles || []).map(serializeArticleForDiscussion),
+      articles,
       maxArticles: 20
     };
     const response = await fetch(apiUrl("/api/discuss-evidence"), {
@@ -469,12 +472,15 @@ async function requestEvidenceDiscussion(mode) {
       throw new Error(result?.error || "Não foi possível gerar a discussão das evidências.");
     }
 
-    currentResult.discussion = result;
-    renderDiscussionResult(result);
+    const entry = normalizeDiscussionEntry(result, signature);
+    currentResult.discussions.unshift(entry);
+    currentResult.discussion = entry;
+    renderDiscussionStack();
     persistLastSearch(activePayload || formSnapshotPayload(), currentResult);
   } catch (error) {
     renderDiscussionMessage("Não foi possível discutir as evidências.", error.message);
   } finally {
+    discussionInFlight = false;
     setDiscussionBusy(false);
   }
 }
@@ -497,27 +503,18 @@ function serializeArticleForDiscussion(article = {}) {
   };
 }
 
-function resetDiscussionPanel() {
-  discussionModeButtons.forEach((button) => button.classList.remove("active"));
-  if (discussionResult) {
-    discussionResult.hidden = true;
-    discussionResult.innerHTML = "";
-  }
-  if (copyDiscussionButton) {
-    copyDiscussionButton.hidden = true;
-    copyDiscussionButton.textContent = "Copiar resultado";
-  }
-  renderDiscussionMessage(
-    "Escolha um modo de análise.",
-    "A resposta será baseada somente nos abstracts e metadados dos artigos retornados."
-  );
+function ensureDiscussionState() {
+  if (!currentResult) return;
+  if (Array.isArray(currentResult.discussions)) return;
+  currentResult.discussions = currentResult.discussion
+    ? [normalizeDiscussionEntry(currentResult.discussion, currentResult.discussion.signature || "legacy")]
+    : [];
 }
 
 function setDiscussionBusy(isBusy, title = "", body = "") {
   discussionModeButtons.forEach((button) => {
     button.disabled = isBusy;
   });
-  if (copyDiscussionButton) copyDiscussionButton.disabled = isBusy;
   if (isBusy) renderDiscussionMessage(title, body);
 }
 
@@ -525,26 +522,81 @@ function renderDiscussionMessage(title, body) {
   if (!discussionPlaceholder) return;
   discussionPlaceholder.hidden = false;
   discussionPlaceholder.innerHTML = `<strong>${escapeHtml(title)}</strong><p>${escapeHtml(body || "")}</p>`;
-  if (discussionResult) discussionResult.hidden = true;
-  if (copyDiscussionButton) copyDiscussionButton.hidden = true;
+  if (discussionResult && !currentResult?.discussions?.length) {
+    discussionResult.hidden = true;
+  }
 }
 
-function renderDiscussionResult(result) {
+function renderDiscussionStack(options = {}) {
   if (!discussionResult) return;
-  discussionPlaceholder.hidden = true;
-  discussionResult.hidden = false;
+  ensureDiscussionState();
+  const entries = currentResult?.discussions || [];
+  discussionModeButtons.forEach((button) => button.classList.remove("active"));
   discussionResult.innerHTML = "";
 
-  const meta = document.createElement("p");
-  meta.className = "discussion-meta";
-  meta.textContent = `${result.selectedCount || 0} artigos analisados no modo ${discussionModeLabel(result.mode)}.`;
-  discussionResult.append(meta);
-  renderMarkdownBlock(result.analysisMarkdown || "", discussionResult);
-
-  if (copyDiscussionButton) {
-    copyDiscussionButton.hidden = false;
-    copyDiscussionButton.disabled = false;
+  if (options.notice) {
+    renderDiscussionMessage(options.notice, "Reutilize o bloco já exibido abaixo para evitar nova chamada de IA e reduzir custo.");
+  } else if (!entries.length) {
+    renderDiscussionMessage(
+      "Escolha um modo de análise.",
+      "A resposta será baseada somente nos abstracts e metadados dos artigos retornados."
+    );
+  } else {
+    discussionPlaceholder.hidden = true;
   }
+
+  if (!entries.length) {
+    discussionResult.hidden = true;
+    return;
+  }
+
+  discussionResult.hidden = false;
+  entries
+    .slice()
+    .sort((a, b) => new Date(b.generatedAt || 0) - new Date(a.generatedAt || 0))
+    .forEach((entry) => {
+      discussionResult.append(createDiscussionCard(entry, {
+        highlighted: entry.signature === options.highlightSignature
+      }));
+    });
+}
+
+function createDiscussionCard(entry, { highlighted = false } = {}) {
+  const card = document.createElement("article");
+  card.className = `discussion-card${highlighted ? " is-highlighted" : ""}`;
+
+  const header = document.createElement("div");
+  header.className = "discussion-card-header";
+
+  const meta = document.createElement("div");
+  const mode = document.createElement("strong");
+  mode.textContent = discussionModeLabel(entry.mode);
+  const timestamp = document.createElement("span");
+  timestamp.textContent = formatDiscussionTimestamp(entry.generatedAt);
+  meta.append(mode, timestamp);
+
+  const copyButton = document.createElement("button");
+  copyButton.className = "secondary-button compact-button";
+  copyButton.type = "button";
+  copyButton.textContent = "Copiar";
+  copyButton.addEventListener("click", async () => {
+    const copied = await copyText(entry.analysisMarkdown || "");
+    copyButton.textContent = copied ? "Copiado." : "Não foi possível copiar.";
+    setTimeout(() => {
+      copyButton.textContent = "Copiar";
+    }, 1400);
+  });
+
+  header.append(meta, copyButton);
+  card.append(header);
+
+  const metaLine = document.createElement("p");
+  metaLine.className = "discussion-meta";
+  metaLine.textContent = `${entry.selectedCount || 0} artigos analisados. Baseado apenas nos artigos retornados pela busca; nenhuma nova fonte foi adicionada.`;
+  card.append(metaLine);
+
+  renderMarkdownBlock(entry.analysisMarkdown || "", card);
+  return card;
 }
 
 function renderMarkdownBlock(markdown, container) {
@@ -591,6 +643,33 @@ function discussionModeLabel(mode) {
     Professor: "Professor",
     Conteudo: "Conteúdo"
   }[mode] || mode || "Clínico";
+}
+
+function normalizeDiscussionEntry(result = {}, signature = "") {
+  return {
+    ...result,
+    id: result.id || `${result.mode || "modo"}-${result.generatedAt || Date.now()}-${Math.random().toString(36).slice(2)}`,
+    signature,
+    generatedAt: result.generatedAt || new Date().toISOString(),
+    analysisMarkdown: result.analysisMarkdown || ""
+  };
+}
+
+function createDiscussionSignature(mode, articles = []) {
+  const articleKey = articles
+    .map((article) => String(article.pmid || article.doi || article.title || "").trim())
+    .filter(Boolean)
+    .join("|");
+  return `${mode || "Clinico"}::${articleKey}`;
+}
+
+function formatDiscussionTimestamp(value) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return "data não registrada";
+  return date.toLocaleString("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short"
+  });
 }
 
 function shouldRetryWithLooseFallback(result) {

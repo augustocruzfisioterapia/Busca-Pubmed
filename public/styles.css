@@ -875,6 +875,11 @@ pre {
 
 .discussion-result {
   display: grid;
+  gap: 14px;
+}
+
+.discussion-card {
+  display: grid;
   gap: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -882,19 +887,45 @@ pre {
   padding: 14px;
 }
 
-.discussion-result h3 {
+.discussion-card.is-highlighted {
+  border-color: rgba(25, 113, 93, 0.45);
+  box-shadow: 0 0 0 3px rgba(25, 113, 93, 0.08);
+}
+
+.discussion-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.discussion-card-header > div {
+  display: grid;
+  gap: 4px;
+}
+
+.discussion-card-header strong {
+  color: var(--ink);
+}
+
+.discussion-card-header span {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.discussion-card h3 {
   margin: 10px 0 0;
   font-size: 1rem;
   color: var(--ink);
 }
 
-.discussion-result p,
-.discussion-result li {
+.discussion-card p,
+.discussion-card li {
   color: var(--ink);
   line-height: 1.6;
 }
 
-.discussion-result ul {
+.discussion-card ul {
   display: grid;
   gap: 8px;
   margin: 0;
@@ -983,8 +1014,14 @@ pre {
   .result-tabs button,
   .result-actions button,
   .discussion-modes button,
+  .discussion-card-header .compact-button,
   .mini-button,
   .remove-query-row {
     width: 100%;
+  }
+
+  .discussion-card-header {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
