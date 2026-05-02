@@ -3,6 +3,14 @@ import { classifyPublicationType } from "./articleScoring.mjs";
 const runtimeEnv = typeof process !== "undefined" ? process.env : {};
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const VALID_MODES = new Set(["Clinico", "Pesquisador", "Professor", "Conteudo"]);
+const DEFAULT_MAX_OUTPUT_TOKENS = 1500;
+const REQUIRED_RESPONSE_SECTIONS = [
+  "## 1. Sintese geral",
+  "## 2. Principais achados",
+  "## 3. Consistencia da evidencia",
+  "## 4. Limitacoes e vieses",
+  "## 5. Aplicabilidade"
+];
 
 const MODE_GUIDANCE = {
   Clinico: "Foque aplicabilidade clinica, magnitude pratica, seguranca e diferenca entre desfechos clinicos e substitutos.",
@@ -53,6 +61,7 @@ export async function runEvidenceDiscussion(input = {}, deps = {}) {
   }
 
   const model = deps.model || runtimeEnv.OPENAI_MODEL || "gpt-4.1-mini";
+  const maxOutputTokens = normalizeMaxOutputTokens(deps.maxOutputTokens || runtimeEnv.OPENAI_MAX_OUTPUT_TOKENS);
   const prompt = buildEvidenceDiscussionPrompt({
     mode,
     query: input.query || "",
@@ -63,8 +72,15 @@ export async function runEvidenceDiscussion(input = {}, deps = {}) {
     apiKey,
     model,
     prompt,
+    compactPrompt: buildEvidenceDiscussionPrompt({
+      mode,
+      query: input.query || "",
+      articles,
+      compact: true
+    }),
     fetchImpl: deps.fetchImpl || fetch,
-    timeoutMs: Number(runtimeEnv.OPENAI_TIMEOUT_MS || 45_000)
+    timeoutMs: Number(runtimeEnv.OPENAI_TIMEOUT_MS || 45_000),
+    maxOutputTokens
   });
 
   return {
@@ -96,25 +112,38 @@ export function prepareEvidenceDiscussionArticles(articles = [], options = {}) {
     .slice(0, limit);
 }
 
-export function buildEvidenceDiscussionPrompt({ mode, query, articles }) {
+export function buildEvidenceDiscussionPrompt({ mode, query, articles, compact = false }) {
   const articleBlocks = articles.map(formatArticleForPrompt).join("\n\n");
   const modeGuidance = MODE_GUIDANCE[mode] || MODE_GUIDANCE.Clinico;
+  const sizeInstruction = compact
+    ? "MODO COMPACTO: responda em no maximo 450 palavras, mantendo todas as cinco secoes."
+    : "Responda de forma objetiva e completa, sem redundancias.";
 
   return [
     "Tarefa: analisar criticamente os artigos retornados pela Busca PubMed.",
     `Modo selecionado: ${mode}. ${modeGuidance}`,
     query ? `Query/contexto da busca: ${query}` : "",
+    sizeInstruction,
     "",
     "Regras obrigatorias:",
     ...SCIENTIFIC_GUARDRAILS.map((rule) => `- ${rule}`),
     "",
     "Formato obrigatorio da resposta em portugues do Brasil:",
-    "## 1. Síntese geral",
+    "## 1. Sintese geral",
+    "Texto curto, no maximo 3 frases.",
     "## 2. Principais achados",
-    "## 3. Consistência da evidência",
-    "## 4. Limitações e vieses",
+    "Use bullet points. No maximo 5 bullets, cada bullet com 1 frase.",
+    "## 3. Consistencia da evidencia",
+    "Texto curto, no maximo 3 frases.",
+    "## 4. Limitacoes e vieses",
+    "Texto curto, no maximo 5 frases. Esta secao e obrigatoria.",
     "## 5. Aplicabilidade",
+    "Texto curto, no maximo 3 frases.",
     "",
+    "Cada secao deve ter no maximo 3 a 5 frases.",
+    "Evite repeticoes e priorize clareza sobre detalhamento excessivo.",
+    "Sempre entregue as cinco secoes completas e nao termine no meio de uma frase.",
+    "Se houver risco de exceder o limite, reduza o detalhamento das secoes 3 e 5, mas preserve sintese, principais achados e limitacoes.",
     "Referencia dos estudos: use preferencialmente Estudo 1, Estudo 2 etc. e inclua PMIDs quando fizer afirmacoes especificas.",
     "Declare no inicio que a analise usa apenas os artigos fornecidos e nao inclui novas fontes.",
     "Em cada secao, cite PMIDs quando fizer afirmacoes especificas.",
@@ -178,7 +207,40 @@ function formatArticleForPrompt(article, index) {
   ].filter(Boolean).join("\n");
 }
 
-async function createOpenAIAnalysis({ apiKey, model, prompt, fetchImpl, timeoutMs }) {
+async function createOpenAIAnalysis({ apiKey, model, prompt, compactPrompt, fetchImpl, timeoutMs, maxOutputTokens }) {
+  const first = await requestOpenAIAnalysis({
+    apiKey,
+    model,
+    prompt,
+    fetchImpl,
+    timeoutMs,
+    maxOutputTokens
+  });
+
+  let text = extractResponseText(first);
+  if (isIncompleteResponse(first) || looksAbrupt(text)) {
+    const retry = await requestOpenAIAnalysis({
+      apiKey,
+      model,
+      prompt: compactPrompt || prompt,
+      fetchImpl,
+      timeoutMs,
+      maxOutputTokens
+    });
+    text = extractResponseText(retry);
+  }
+
+  if (!text) {
+    const error = new Error("A IA não retornou texto analisável.");
+    error.statusCode = 502;
+    error.publicMessage = "A IA não retornou uma análise válida. Tente novamente.";
+    throw error;
+  }
+
+  return completeStructuredAnalysis(text);
+}
+
+async function requestOpenAIAnalysis({ apiKey, model, prompt, fetchImpl, timeoutMs, maxOutputTokens }) {
   const response = await fetchImpl(OPENAI_RESPONSES_URL, {
     method: "POST",
     headers: {
@@ -193,7 +255,7 @@ async function createOpenAIAnalysis({ apiKey, model, prompt, fetchImpl, timeoutM
         ...SCIENTIFIC_GUARDRAILS
       ].join("\n"),
       input: prompt,
-      max_output_tokens: 1800,
+      max_output_tokens: maxOutputTokens,
       text: { format: { type: "text" } }
     }),
     signal: timeoutSignal(timeoutMs)
@@ -201,15 +263,7 @@ async function createOpenAIAnalysis({ apiKey, model, prompt, fetchImpl, timeoutM
 
   if (!response.ok) throw await openAIHttpError(response);
 
-  const data = await response.json();
-  const text = extractResponseText(data);
-  if (!text) {
-    const error = new Error("A IA não retornou texto analisável.");
-    error.statusCode = 502;
-    error.publicMessage = "A IA não retornou uma análise válida. Tente novamente.";
-    throw error;
-  }
-  return text.trim();
+  return response.json();
 }
 
 function extractResponseText(data = {}) {
@@ -223,6 +277,41 @@ function extractResponseText(data = {}) {
     }
   }
   return chunks.join("\n").trim();
+}
+
+function isIncompleteResponse(data = {}) {
+  return data.status === "incomplete" || data.incomplete_details?.reason === "max_output_tokens";
+}
+
+function looksAbrupt(value = "") {
+  const text = String(value || "").trim();
+  if (!text) return true;
+  if (text.length < 80) return true;
+  return !/[.!?)]$/.test(text);
+}
+
+function completeStructuredAnalysis(value = "") {
+  let text = trimAbruptEnding(String(value || "").trim());
+  for (const heading of REQUIRED_RESPONSE_SECTIONS) {
+    if (!hasSectionHeading(text, heading)) {
+      text += `\n\n${heading}\nOs dados disponiveis sao limitados para uma conclusao robusta sem extrapolar os artigos fornecidos.`;
+    }
+  }
+  return text.trim();
+}
+
+function trimAbruptEnding(value = "") {
+  const text = String(value || "").trim();
+  if (!text || !looksAbrupt(text)) return text;
+  const lastSentenceEnd = Math.max(text.lastIndexOf("."), text.lastIndexOf("!"), text.lastIndexOf("?"));
+  if (lastSentenceEnd > Math.floor(text.length * 0.55)) return text.slice(0, lastSentenceEnd + 1).trim();
+  return `${text.replace(/[,\s;:]+$/, "")}.`;
+}
+
+function hasSectionHeading(text, heading) {
+  const normalizedText = normalizePlain(text);
+  const normalizedHeading = normalizePlain(heading).replace(/^##\s*/, "");
+  return normalizedText.includes(normalizedHeading);
 }
 
 function extractSampleSize(value = "") {
@@ -283,6 +372,17 @@ function clampNumber(value, min, max, fallback) {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(Math.max(parsed, min), max);
+}
+
+function normalizeMaxOutputTokens(value) {
+  return clampNumber(value, 1200, 1500, DEFAULT_MAX_OUTPUT_TOKENS);
+}
+
+function normalizePlain(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 }
 
 function timeoutSignal(timeoutMs) {

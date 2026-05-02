@@ -527,6 +527,10 @@ test("buildEvidenceDiscussionPrompt inclui regras cientificas obrigatorias", () 
 
   assert.match(prompt, /## 1\./);
   assert.match(prompt, /## 4\./);
+  assert.match(prompt, /no maximo 3 frases/);
+  assert.match(prompt, /No maximo 5 bullets/);
+  assert.match(prompt, /nao termine no meio de uma frase/);
+  assert.match(prompt, /preserve sintese, principais achados e limitacoes/);
   assert.match(prompt, /Nao invente informacoes ausentes/);
   assert.match(prompt, /Nao afirme conclusoes absolutas/);
   assert.match(prompt, /Nao adicione, cite ou sugira estudos externos/);
@@ -568,11 +572,64 @@ test("runEvidenceDiscussion chama Responses API com artigos retornados pela busc
 
   assert.equal(capturedUrl, "https://api.openai.com/v1/responses");
   assert.equal(capturedBody.model, "test-model");
+  assert.equal(capturedBody.max_output_tokens, 1500);
   assert.match(capturedBody.instructions, /Use exclusivamente os artigos fornecidos/);
   assert.match(capturedBody.input, /PMID: 99/);
   assert.match(capturedBody.input, /Tamanho amostral identificado: 120/);
   assert.equal(result.selectedCount, 1);
   assert.match(result.analysisMarkdown, /Sintese geral/);
+});
+
+test("runEvidenceDiscussion refaz chamada compacta quando resposta vem incompleta", async () => {
+  let calls = 0;
+  const result = await runEvidenceDiscussion({
+    mode: "Clinico",
+    query: "ventilation",
+    articles: [
+      {
+        pmid: "101",
+        title: "Systematic review.",
+        year: "2025",
+        studyType: "Systematic Review",
+        abstractText: "The review included 12 studies and reported clinical outcomes."
+      }
+    ]
+  }, {
+    openaiApiKey: "sk-test",
+    model: "test-model",
+    fetchImpl: async (_url, options) => {
+      calls += 1;
+      const body = JSON.parse(options.body);
+      if (calls === 1) {
+        assert.equal(body.max_output_tokens, 1500);
+        return jsonResponse({
+          status: "incomplete",
+          incomplete_details: { reason: "max_output_tokens" },
+          output_text: "## 1. Sintese geral\nTexto cortado no meio"
+        });
+      }
+
+      assert.match(body.input, /MODO COMPACTO/);
+      return jsonResponse({
+        output_text: [
+          "## 1. Sintese geral",
+          "Analise baseada apenas nos artigos fornecidos.",
+          "## 2. Principais achados",
+          "- Estudo 1 sugere achado clinico cauteloso.",
+          "## 3. Consistencia da evidencia",
+          "A consistencia e limitada pelos dados disponiveis.",
+          "## 4. Limitacoes e vieses",
+          "Os dados disponiveis sao limitados para uma conclusao robusta.",
+          "## 5. Aplicabilidade",
+          "A aplicabilidade deve ser avaliada conforme o contexto clinico."
+        ].join("\n")
+      });
+    }
+  });
+
+  assert.equal(calls, 2);
+  assert.match(result.analysisMarkdown, /## 5\. Aplicabilidade/);
+  assert.match(result.analysisMarkdown, /\.$/);
 });
 
 test("runArticleSearch marca indisponibilidade quando todas as buscas falham", async () => {
