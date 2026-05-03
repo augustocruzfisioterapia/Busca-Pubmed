@@ -13,11 +13,36 @@ const REQUIRED_RESPONSE_SECTIONS = [
 ];
 
 const MODE_GUIDANCE = {
-  Clinico: "Foque aplicabilidade clinica, magnitude pratica, seguranca e diferenca entre desfechos clinicos e substitutos.",
-  Pesquisador: "Foque desenho dos estudos, consistencia, heterogeneidade, vieses, lacunas e proximos estudos necessarios.",
-  Professor: "Foque explicacao didatica, hierarquia da evidencia e pontos de ensino sem simplificar demais.",
-  Conteudo: "Foque uma sintese clara para comunicacao profissional, sem sensacionalismo e sem prometer resultados."
+  Clinico: [
+    "Foco do modo Clinico: decisao pratica.",
+    "Interprete os resultados para aplicacao clinica, destacando quando usar, quando evitar, riscos e beneficios.",
+    "Priorize impacto na pratica e evite aprofundamento metodologico excessivo."
+  ],
+  Pesquisador: [
+    "Foco do modo Pesquisador: validade cientifica.",
+    "Avalie desenho dos estudos, N e poder amostral, risco de vies, consistencia dos resultados e confiabilidade da evidencia.",
+    "Evite recomendacoes praticas diretas; discuta incerteza, robustez e lacunas."
+  ],
+  Professor: [
+    "Foco do modo Professor: didatica.",
+    "Explique os achados de forma progressiva, organize o raciocinio em etapas e traduza conceitos complexos.",
+    "Use linguagem clara e estruturada, mantendo rigor sem excesso tecnico."
+  ],
+  Conteudo: [
+    "Foco do modo Conteudo: comunicacao.",
+    "Extraia mensagens-chave, insights principais e frases claras utilizaveis.",
+    "Mantenha precisao cientifica e evite excesso de detalhamento tecnico."
+  ]
 };
+
+const SHARED_MODE_REQUIREMENTS = [
+  "Principais resultados dos estudos.",
+  "Direcao dos achados: beneficio, neutro ou dano, quando os dados permitirem.",
+  "N/tamanho amostral quando disponivel; se nao estiver no abstract, declarar como nao informado.",
+  "Referencia aos estudos como Estudo 1, Estudo 2 etc. e PMIDs quando fizer afirmacoes especificas.",
+  "Relevancia estatistica quando estiver informada ou claramente inferivel; se nao estiver, declarar que nao foi informada.",
+  "Limitacoes gerais dos dados, sem redundancia."
+];
 
 const SCIENTIFIC_GUARDRAILS = [
   "Use exclusivamente os artigos fornecidos na entrada.",
@@ -121,9 +146,14 @@ export function buildEvidenceDiscussionPrompt({ mode, query, articles, compact =
 
   return [
     "Tarefa: analisar criticamente os artigos retornados pela Busca PubMed.",
-    `Modo selecionado: ${mode}. ${modeGuidance}`,
+    `Modo selecionado: ${mode}.`,
+    "Diferenciacao obrigatoria do modo selecionado:",
+    ...modeGuidance.map((rule) => `- ${rule}`),
     query ? `Query/contexto da busca: ${query}` : "",
     sizeInstruction,
+    "",
+    "Base obrigatoria para todos os modos:",
+    ...SHARED_MODE_REQUIREMENTS.map((rule) => `- ${rule}`),
     "",
     "Regras obrigatorias:",
     ...SCIENTIFIC_GUARDRAILS.map((rule) => `- ${rule}`),

@@ -527,6 +527,12 @@ test("buildEvidenceDiscussionPrompt inclui regras cientificas obrigatorias", () 
 
   assert.match(prompt, /## 1\./);
   assert.match(prompt, /## 4\./);
+  assert.match(prompt, /Base obrigatoria para todos os modos/);
+  assert.match(prompt, /Direcao dos achados: beneficio, neutro ou dano/);
+  assert.match(prompt, /N\/tamanho amostral quando disponivel/);
+  assert.match(prompt, /Relevancia estatistica/);
+  assert.match(prompt, /Foco do modo Clinico: decisao pratica/);
+  assert.match(prompt, /quando usar, quando evitar, riscos e beneficios/);
   assert.match(prompt, /no maximo 3 frases/);
   assert.match(prompt, /No maximo 5 bullets/);
   assert.match(prompt, /nao termine no meio de uma frase/);
@@ -542,6 +548,29 @@ test("buildEvidenceDiscussionPrompt inclui regras cientificas obrigatorias", () 
   assert.match(prompt, /Sempre inclua limitacoes e vieses/);
   assert.match(prompt, /Diferencie desfechos clinicos de desfechos substitutos/);
   assert.match(prompt, /PMID: 11/);
+});
+
+test("buildEvidenceDiscussionPrompt diferencia foco entre modos", () => {
+  const articles = prepareEvidenceDiscussionArticles([
+    {
+      pmid: "12",
+      title: "Clinical trial about respiratory support.",
+      year: "2026",
+      studyType: "Clinical Trial",
+      abstractText: "N = 90 patients were included and clinical outcomes were reported."
+    }
+  ]);
+
+  const pesquisador = buildEvidenceDiscussionPrompt({ mode: "Pesquisador", query: "support", articles });
+  const professor = buildEvidenceDiscussionPrompt({ mode: "Professor", query: "support", articles });
+  const conteudo = buildEvidenceDiscussionPrompt({ mode: "Conteudo", query: "support", articles });
+
+  assert.match(pesquisador, /Foco do modo Pesquisador: validade cientifica/);
+  assert.match(pesquisador, /Evite recomendacoes praticas diretas/);
+  assert.match(professor, /Foco do modo Professor: didatica/);
+  assert.match(professor, /organize o raciocinio em etapas/);
+  assert.match(conteudo, /Foco do modo Conteudo: comunicacao/);
+  assert.match(conteudo, /mensagens-chave, insights principais/);
 });
 
 test("runEvidenceDiscussion chama Responses API com artigos retornados pela busca", async () => {
