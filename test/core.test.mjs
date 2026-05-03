@@ -533,10 +533,15 @@ test("buildEvidenceDiscussionPrompt inclui regras cientificas obrigatorias", () 
   assert.match(prompt, /Relevancia estatistica/);
   assert.match(prompt, /Foco do modo Clinico: decisao pratica/);
   assert.match(prompt, /quando usar, quando evitar, riscos e beneficios/);
-  assert.match(prompt, /no maximo 3 frases/);
-  assert.match(prompt, /No maximo 5 bullets/);
+  assert.match(prompt, /Formato obrigatorio e exclusivo da resposta: MODO CLINICO/);
+  assert.match(prompt, /## 1\. O que isso muda na pratica/);
+  assert.match(prompt, /## 2\. Quando aplicar/);
+  assert.match(prompt, /## 3\. Quando evitar/);
+  assert.match(prompt, /## 4\. Riscos importantes/);
+  assert.match(prompt, /Nao use a estrutura de outros modos/);
+  assert.match(prompt, /similaridade acima de 40% e considerada erro/);
+  assert.match(prompt, /3 a 5 frases/);
   assert.match(prompt, /nao termine no meio de uma frase/);
-  assert.match(prompt, /preserve sintese, principais achados e limitacoes/);
   assert.match(prompt, /Nao invente informacoes ausentes/);
   assert.match(prompt, /Nao afirme conclusoes absolutas/);
   assert.match(prompt, /Nao adicione, cite ou sugira estudos externos/);
@@ -567,10 +572,16 @@ test("buildEvidenceDiscussionPrompt diferencia foco entre modos", () => {
 
   assert.match(pesquisador, /Foco do modo Pesquisador: validade cientifica/);
   assert.match(pesquisador, /Evite recomendacoes praticas diretas/);
+  assert.match(pesquisador, /## 1\. Qualidade da evidencia/);
+  assert.match(pesquisador, /## 4\. Grau de confiabilidade/);
   assert.match(professor, /Foco do modo Professor: didatica/);
   assert.match(professor, /organize o raciocinio em etapas/);
+  assert.match(professor, /## 1\. Explicacao do fenomeno/);
+  assert.match(professor, /## 4\. Onde os alunos costumam errar/);
   assert.match(conteudo, /Foco do modo Conteudo: comunicacao/);
   assert.match(conteudo, /mensagens-chave, insights principais/);
+  assert.match(conteudo, /## 1\. Mensagem principal/);
+  assert.match(conteudo, /## 2\. 3 insights principais/);
 });
 
 test("runEvidenceDiscussion chama Responses API com artigos retornados pela busca", async () => {
@@ -604,9 +615,11 @@ test("runEvidenceDiscussion chama Responses API com artigos retornados pela busc
   assert.equal(capturedBody.max_output_tokens, 1500);
   assert.match(capturedBody.instructions, /Use exclusivamente os artigos fornecidos/);
   assert.match(capturedBody.input, /PMID: 99/);
+  assert.match(capturedBody.input, /## 1\. Qualidade da evidencia/);
+  assert.doesNotMatch(capturedBody.input, /## 1\. O que isso muda na pratica/);
   assert.match(capturedBody.input, /Tamanho amostral identificado: 120/);
   assert.equal(result.selectedCount, 1);
-  assert.match(result.analysisMarkdown, /Sintese geral/);
+  assert.match(result.analysisMarkdown, /Qualidade da evidencia/);
 });
 
 test("runEvidenceDiscussion refaz chamada compacta quando resposta vem incompleta", async () => {
@@ -657,7 +670,7 @@ test("runEvidenceDiscussion refaz chamada compacta quando resposta vem incomplet
   });
 
   assert.equal(calls, 2);
-  assert.match(result.analysisMarkdown, /## 5\. Aplicabilidade/);
+  assert.match(result.analysisMarkdown, /## 4\. Riscos importantes/);
   assert.match(result.analysisMarkdown, /\.$/);
 });
 

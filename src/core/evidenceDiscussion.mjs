@@ -4,13 +4,6 @@ const runtimeEnv = typeof process !== "undefined" ? process.env : {};
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const VALID_MODES = new Set(["Clinico", "Pesquisador", "Professor", "Conteudo"]);
 const DEFAULT_MAX_OUTPUT_TOKENS = 1500;
-const REQUIRED_RESPONSE_SECTIONS = [
-  "## 1. Sintese geral",
-  "## 2. Principais achados",
-  "## 3. Consistencia da evidencia",
-  "## 4. Limitacoes e vieses",
-  "## 5. Aplicabilidade"
-];
 
 const MODE_GUIDANCE = {
   Clinico: [
@@ -33,6 +26,49 @@ const MODE_GUIDANCE = {
     "Extraia mensagens-chave, insights principais e frases claras utilizaveis.",
     "Mantenha precisao cientifica e evite excesso de detalhamento tecnico."
   ]
+};
+
+const MODE_RESPONSE_STRUCTURES = {
+  Clinico: {
+    label: "MODO CLINICO (DECISAO)",
+    prohibition: "Proibido: evite analise metodologica extensa.",
+    sections: [
+      ["## 1. O que isso muda na pratica", "Interprete impacto clinico, direcao dos achados, N quando disponivel e relevancia para decisao."],
+      ["## 2. Quando aplicar", "Liste condicoes clinicas ou perfis de paciente em que os dados favorecem uso cauteloso."],
+      ["## 3. Quando evitar", "Liste cenarios em que os dados nao sustentam uso, sugerem neutralidade, dano ou incerteza."],
+      ["## 4. Riscos importantes", "Descreva riscos, limites de seguranca e principais incertezas dos estudos."]
+    ]
+  },
+  Pesquisador: {
+    label: "MODO PESQUISADOR (CRITICO)",
+    prohibition: "Proibido: nao dar recomendacoes clinicas diretas.",
+    sections: [
+      ["## 1. Qualidade da evidencia", "Avalie hierarquia, desenho, direcao dos achados, N e relevancia estatistica quando informada."],
+      ["## 2. Principais vieses", "Aponte vieses plausiveis a partir dos abstracts e metadados, sem extrapolar."],
+      ["## 3. Limitacoes metodologicas", "Discuta N, poder amostral, heterogeneidade, desfechos clinicos/substitutos e lacunas."],
+      ["## 4. Grau de confiabilidade", "Classifique de forma cautelosa a confiabilidade geral e consistencia dos resultados."]
+    ]
+  },
+  Professor: {
+    label: "MODO PROFESSOR (DIDATICO)",
+    prohibition: "Proibido: evitar linguagem excessivamente tecnica.",
+    sections: [
+      ["## 1. Explicacao do fenomeno", "Explique a pergunta clinica/cientifica em linguagem progressiva e clara."],
+      ["## 2. Como interpretar os resultados", "Ensine como ler direcao dos achados, N, tipo de estudo e relevancia estatistica quando informada."],
+      ["## 3. O que isso significa na pratica", "Traduza os achados para significado pratico sem transformar em recomendacao absoluta."],
+      ["## 4. Onde os alunos costumam errar", "Liste erros comuns de interpretacao, incluindo confundir associacao, significancia e causalidade."]
+    ]
+  },
+  Conteudo: {
+    label: "MODO CONTEUDO (COMUNICACAO)",
+    prohibition: "Proibido: evitar detalhamento tecnico profundo.",
+    sections: [
+      ["## 1. Mensagem principal", "Entregue uma mensagem curta, fiel aos dados e sem promessa absoluta."],
+      ["## 2. 3 insights principais", "Liste exatamente 3 insights em bullets, incluindo direcao dos achados, N quando disponivel e limites."],
+      ["## 3. Frases utilizaveis", "Crie frases curtas para comunicacao profissional, sem sensacionalismo."],
+      ["## 4. Como comunicar isso para leigos/profissionais", "Diferencie como falar com publico leigo e com profissionais, mantendo precisao cientifica."]
+    ]
+  }
 };
 
 const SHARED_MODE_REQUIREMENTS = [
@@ -96,6 +132,7 @@ export async function runEvidenceDiscussion(input = {}, deps = {}) {
   const analysisMarkdown = await createOpenAIAnalysis({
     apiKey,
     model,
+    mode,
     prompt,
     compactPrompt: buildEvidenceDiscussionPrompt({
       mode,
@@ -140,8 +177,9 @@ export function prepareEvidenceDiscussionArticles(articles = [], options = {}) {
 export function buildEvidenceDiscussionPrompt({ mode, query, articles, compact = false }) {
   const articleBlocks = articles.map(formatArticleForPrompt).join("\n\n");
   const modeGuidance = MODE_GUIDANCE[mode] || MODE_GUIDANCE.Clinico;
+  const responseStructure = getModeResponseStructure(mode);
   const sizeInstruction = compact
-    ? "MODO COMPACTO: responda em no maximo 450 palavras, mantendo todas as cinco secoes."
+    ? "MODO COMPACTO: responda em no maximo 450 palavras, mantendo todas as secoes obrigatorias do modo."
     : "Responda de forma objetiva e completa, sem redundancias.";
 
   return [
@@ -158,22 +196,20 @@ export function buildEvidenceDiscussionPrompt({ mode, query, articles, compact =
     "Regras obrigatorias:",
     ...SCIENTIFIC_GUARDRAILS.map((rule) => `- ${rule}`),
     "",
-    "Formato obrigatorio da resposta em portugues do Brasil:",
-    "## 1. Sintese geral",
-    "Texto curto, no maximo 3 frases.",
-    "## 2. Principais achados",
-    "Use bullet points. No maximo 5 bullets, cada bullet com 1 frase.",
-    "## 3. Consistencia da evidencia",
-    "Texto curto, no maximo 3 frases.",
-    "## 4. Limitacoes e vieses",
-    "Texto curto, no maximo 5 frases. Esta secao e obrigatoria.",
-    "## 5. Aplicabilidade",
-    "Texto curto, no maximo 3 frases.",
+    `Formato obrigatorio e exclusivo da resposta: ${responseStructure.label}`,
+    responseStructure.prohibition,
+    "Use exatamente as secoes abaixo, nesta ordem. Nao use a estrutura de outros modos.",
+    ...responseStructure.sections.flatMap(([heading, instruction]) => [
+      heading,
+      instruction
+    ]),
     "",
-    "Cada secao deve ter no maximo 3 a 5 frases.",
+    "Regra absoluta de diferenciacao: se comparada a outro modo, esta resposta deve ter estrutura, foco e utilidade claramente diferentes; similaridade acima de 40% e considerada erro.",
+    "Incorpore a base obrigatoria dentro das secoes especificas do modo, sem criar secoes genericas extras.",
+    "Cada secao deve ter no maximo 3 a 5 frases, exceto quando a secao pedir bullets.",
     "Evite repeticoes e priorize clareza sobre detalhamento excessivo.",
-    "Sempre entregue as cinco secoes completas e nao termine no meio de uma frase.",
-    "Se houver risco de exceder o limite, reduza o detalhamento das secoes 3 e 5, mas preserve sintese, principais achados e limitacoes.",
+    "Sempre entregue todas as secoes obrigatorias e nao termine no meio de uma frase.",
+    "Se houver risco de exceder o limite, reduza detalhamento das secoes finais, mas preserve resultados centrais, direcao dos achados, N e limitacoes.",
     "Referencia dos estudos: use preferencialmente Estudo 1, Estudo 2 etc. e inclua PMIDs quando fizer afirmacoes especificas.",
     "Declare no inicio que a analise usa apenas os artigos fornecidos e nao inclui novas fontes.",
     "Em cada secao, cite PMIDs quando fizer afirmacoes especificas.",
@@ -237,7 +273,7 @@ function formatArticleForPrompt(article, index) {
   ].filter(Boolean).join("\n");
 }
 
-async function createOpenAIAnalysis({ apiKey, model, prompt, compactPrompt, fetchImpl, timeoutMs, maxOutputTokens }) {
+async function createOpenAIAnalysis({ apiKey, model, mode, prompt, compactPrompt, fetchImpl, timeoutMs, maxOutputTokens }) {
   const first = await requestOpenAIAnalysis({
     apiKey,
     model,
@@ -267,7 +303,7 @@ async function createOpenAIAnalysis({ apiKey, model, prompt, compactPrompt, fetc
     throw error;
   }
 
-  return completeStructuredAnalysis(text);
+  return completeStructuredAnalysis(text, mode);
 }
 
 async function requestOpenAIAnalysis({ apiKey, model, prompt, fetchImpl, timeoutMs, maxOutputTokens }) {
@@ -320,9 +356,9 @@ function looksAbrupt(value = "") {
   return !/[.!?)]$/.test(text);
 }
 
-function completeStructuredAnalysis(value = "") {
+function completeStructuredAnalysis(value = "", mode = "Clinico") {
   let text = trimAbruptEnding(String(value || "").trim());
-  for (const heading of REQUIRED_RESPONSE_SECTIONS) {
+  for (const heading of getRequiredResponseSections(mode)) {
     if (!hasSectionHeading(text, heading)) {
       text += `\n\n${heading}\nOs dados disponiveis sao limitados para uma conclusao robusta sem extrapolar os artigos fornecidos.`;
     }
@@ -342,6 +378,14 @@ function hasSectionHeading(text, heading) {
   const normalizedText = normalizePlain(text);
   const normalizedHeading = normalizePlain(heading).replace(/^##\s*/, "");
   return normalizedText.includes(normalizedHeading);
+}
+
+function getModeResponseStructure(mode) {
+  return MODE_RESPONSE_STRUCTURES[mode] || MODE_RESPONSE_STRUCTURES.Clinico;
+}
+
+function getRequiredResponseSections(mode) {
+  return getModeResponseStructure(mode).sections.map(([heading]) => heading);
 }
 
 function extractSampleSize(value = "") {
