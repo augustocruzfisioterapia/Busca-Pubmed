@@ -9,7 +9,43 @@ import { calculateArticleScore } from "../src/core/articleScoring.mjs";
 import { buildEvidenceDiscussionPrompt, prepareEvidenceDiscussionArticles, runEvidenceDiscussion } from "../src/core/evidenceDiscussion.mjs";
 import { resolveJournalMetrics } from "../src/core/journalMetrics.mjs";
 import { buildNaturalTerm, buildStructuredQuery, normalizeMaxResults, sanitizePubMedQuery } from "../src/core/queryBuilder.mjs";
+import { getUsageMetricsSnapshot, recordAiUsage, recordClientEvent, recordEndpointUsage, recordSearchUsage, resetUsageMetricsForTests } from "../src/core/usageMetrics.mjs";
 import { validateSearchOutput } from "../src/core/validation.mjs";
+
+test("usageMetrics registra agregados sem armazenar termos sensiveis", () => {
+  resetUsageMetricsForTests();
+  recordClientEvent({
+    name: "search_completed",
+    path: "/",
+    params: {
+      searchText: "dor lombar",
+      query: "\"low back pain\"[MeSH Terms]",
+      result_count: 10
+    }
+  });
+  recordClientEvent({
+    name: "article_opened",
+    path: "/",
+    params: {
+      destination: "pubmed",
+      pmid: "123",
+      title: "Sensitive title"
+    }
+  });
+  recordSearchUsage({ ok: true, durationMs: 250, returned: 10, maxResults: 10 });
+  recordAiUsage({ ok: true, durationMs: 500, profile: "clinico", cacheHit: false, estimatedCostUsd: 0.01, selectedCount: 10 });
+  recordEndpointUsage({ method: "POST", route: "/api/search", status: 200, durationMs: 250 });
+
+  const snapshot = getUsageMetricsSnapshot();
+  assert.equal(snapshot.searches.total, 1);
+  assert.equal(snapshot.ai.cacheMisses, 1);
+  assert.equal(snapshot.ai.estimatedCostUsd, 0.01);
+  assert.equal(snapshot.articleOpens.pubmed, 1);
+  assert.equal(snapshot.endpoints[0].route, "/api/search");
+  assert.equal(snapshot.recentClientEvents[0].params.pmid, undefined);
+  assert.equal(snapshot.recentClientEvents[1].params.query, undefined);
+  assert.equal(snapshot.recentClientEvents[1].params.result_count, 10);
+});
 
 test("buildStructuredQuery cria query simples e query priorizada", () => {
   const query = buildStructuredQuery({

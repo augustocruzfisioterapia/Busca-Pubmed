@@ -5,3 +5,5 @@ window.BUSCA_PUBMED_API_BASE =
   window.location.protocol === "file:" || TEM_EVIDENCIA_STATIC_HOSTS.has(window.location.hostname)
     ? TEM_EVIDENCIA_API_FALLBACK
     : "";
+window.BUSCA_PUBMED_GA_MEASUREMENT_ID = window.BUSCA_PUBMED_GA_MEASUREMENT_ID || "";
+window.BUSCA_PUBMED_INTERNAL_ANALYTICS = window.BUSCA_PUBMED_INTERNAL_ANALYTICS !== false;

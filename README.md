@@ -73,11 +73,15 @@ NCBI_EMAIL=seu-email-de-contato
 NCBI_API_KEY=sua-chave-ncbi
 UNPAYWALL_EMAIL=seu-email-de-contato
 OPENAI_API_KEY=sua-chave-openai
+GA_MEASUREMENT_ID=G-XXXXXXXXXX
+ADMIN_METRICS_TOKEN=crie-um-token-longo
 ```
 
 `NCBI_API_KEY` aumenta o limite de uso das E-utilities de 3 para ate 10 requisicoes por segundo, conforme as regras do NCBI. Para gerar a chave, entre na sua conta NCBI e acesse `Account settings` > `API Key Management`.
 
 `OPENAI_API_KEY` habilita o painel de interpretacao por IA. Sem essa variavel, a busca continua funcionando normalmente e apenas a interpretacao por IA fica indisponivel.
+
+`GA_MEASUREMENT_ID` habilita Google Analytics 4 no frontend. O app tambem registra metricas internas agregadas em memoria, sem armazenar termos de busca, PMID, DOI, IP ou dados pessoais. O dashboard basico fica em `/admin/metrics?token=SEU_TOKEN`, usando `ADMIN_METRICS_TOKEN`.
 
 O plano gratuito serve para teste publico inicial, mas pode entrar em modo de espera quando fica sem acesso. Para uma ferramenta publica com uso real, use um plano sempre ativo.
 
@@ -147,7 +151,16 @@ RATE_LIMIT_AI_WINDOW_MS=600000
 RATE_LIMIT_AI_MAX=6
 MAX_BODY_SIZE=1000000
 ALLOWED_ORIGIN=https://www.temevidencia.com.br,https://temevidencia.com.br,https://busca-pubmed.onrender.com,http://localhost:3000,http://localhost:4173,http://localhost:5173
+GA_MEASUREMENT_ID=
+ADMIN_METRICS_TOKEN=
 ```
+
+## Analytics e metricas
+
+- GA4 e carregado somente quando `GA_MEASUREMENT_ID` esta configurado.
+- Eventos enviados: busca realizada, artigo aberto, perfil de IA selecionado, discussao IA gerada, erro de busca e erro de IA.
+- A camada interna registra apenas contadores agregados: acessos, buscas, uso da IA, cache hits/misses, custo estimado, tempo medio e endpoints mais usados.
+- Em producao, proteja o dashboard com `ADMIN_METRICS_TOKEN`.
 
 ## Regras de links
 

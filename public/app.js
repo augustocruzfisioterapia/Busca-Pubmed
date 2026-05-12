@@ -43,6 +43,14 @@ let activeDiscussionMode = "clinico";
 const RETURN_RESTORE_KEY = "article-search-returning";
 const SETTINGS_VERSION = 4;
 const configuredApiBase = normalizeApiBase(window.BUSCA_PUBMED_API_BASE || "");
+const gaMeasurementId = normalizeAnalyticsId(window.BUSCA_PUBMED_GA_MEASUREMENT_ID || "");
+const internalAnalyticsEnabled = window.BUSCA_PUBMED_INTERNAL_ANALYTICS !== false;
+
+initializeAnalytics();
+trackEvent("page_view", {
+  page_path: window.location.pathname || "/",
+  page_title: document.title
+});
 
 const CLIENT_DESCRIPTORS = [
   {
@@ -145,6 +153,7 @@ form.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (form.dataset.busy === "true") return;
 
+  const searchStartedAt = performance.now();
   setBusy(true);
   currentView = "recommended";
   targetResultCount = normalizeRequestedTotal(form.maxResults.value);
@@ -174,6 +183,14 @@ form.addEventListener("submit", async (event) => {
     preparePaginationState(currentResult);
     persistLastSearch(payload, result);
     renderResult(result);
+    trackEvent("search_completed", {
+      result_count: result.count?.returned || result.articles?.length || 0,
+      requested_results: targetResultCount,
+      free_pdf_only: Boolean(payload.freePdfOnly),
+      advanced_query: Boolean(payload.manualStructuredQuery),
+      search_unavailable: Boolean(result.searchUnavailable),
+      duration_ms: Math.round(performance.now() - searchStartedAt)
+    });
   } catch (error) {
     currentResult = null;
     activePayload = null;
@@ -183,6 +200,10 @@ form.addEventListener("submit", async (event) => {
       error.message || "A PubMed ou o servidor de busca não respondeu corretamente."
     );
     setExportButtonsEnabled(false);
+    trackEvent("search_error", {
+      error_type: classifyClientError(error),
+      duration_ms: Math.round(performance.now() - searchStartedAt)
+    });
   } finally {
     setBusy(false);
   }
@@ -307,6 +328,9 @@ discussEvidenceButton?.addEventListener("click", () => {
   if (!currentResult?.articles?.length) return;
   discussionPanel.hidden = false;
   activeDiscussionMode = activeDiscussionMode || "clinico";
+  trackEvent("discussion_panel_opened", {
+    article_count: uniqueArticles(currentResult.articles || []).length
+  });
   renderDiscussionStack();
 });
 
@@ -321,6 +345,9 @@ discussionPanel?.addEventListener("click", (event) => {
 discussionModeButtons.forEach((button) => {
   button.addEventListener("click", async () => {
     activeDiscussionMode = normalizeDiscussionMode(button.dataset.mode || "clinico");
+    trackEvent("discussion_profile_selected", {
+      profile: activeDiscussionMode
+    });
     renderDiscussionStack();
     if (!getDiscussionEntry(activeDiscussionMode)) {
       await requestEvidenceDiscussion(activeDiscussionMode);
@@ -458,6 +485,7 @@ async function requestEvidenceDiscussion(mode = activeDiscussionMode) {
   }
 
   discussionInFlightMode = normalizedMode;
+  const discussionStartedAt = performance.now();
   setDiscussionBusy(true, "Gerando interpretação aprofundada...", `A IA está criando apenas o perfil ${discussionModeLabel(normalizedMode)}, com foco e estrutura próprios.`);
   try {
     // Envia somente dados recuperados na busca atual; o backend aplica a selecao, o cache por perfil e as regras anti-extrapolacao.
@@ -492,11 +520,22 @@ async function requestEvidenceDiscussion(mode = activeDiscussionMode) {
     currentResult.discussion = entry;
     renderDiscussionStack();
     persistLastSearch(activePayload || formSnapshotPayload(), currentResult);
+    trackEvent("ai_discussion_generated", {
+      profile: normalizedMode,
+      cache_hit: Boolean(entry.cache?.hit),
+      selected_count: entry.selectedCount || 0,
+      duration_ms: Math.round(performance.now() - discussionStartedAt)
+    });
   } catch (error) {
     renderDiscussionMessage(
       "Não foi possível gerar esta interpretação.",
       `${error.message || "O motor de IA não respondeu corretamente."} A busca continua disponível; tente novamente em alguns instantes.`
     );
+    trackEvent("ai_discussion_error", {
+      profile: normalizedMode,
+      error_type: classifyClientError(error),
+      duration_ms: Math.round(performance.now() - discussionStartedAt)
+    });
   } finally {
     discussionInFlightMode = "";
     setDiscussionBusy(false);
@@ -961,6 +1000,7 @@ function renderArticles(result) {
     pubmedLink.href = article.pubmedUrl;
     pubmedLink.addEventListener("click", async (event) => {
       event.preventDefault();
+      trackArticleOpen(article, "pubmed");
       await persistCurrentBeforeNavigation();
       window.location.assign(article.pubmedUrl);
     });
@@ -971,6 +1011,7 @@ function renderArticles(result) {
       pdfLink.href = article.pdf.url;
       pdfLink.addEventListener("click", async (event) => {
         event.preventDefault();
+        trackArticleOpen(article, "pdf");
         await persistCurrentBeforeNavigation();
         window.location.assign(article.pdf.url);
       });
@@ -1982,6 +2023,107 @@ function normalizeClientKey(value) {
 
 function escapeClientQuotes(value) {
   return String(value).replace(/"/g, '\\"');
+}
+
+function initializeAnalytics() {
+  if (!gaMeasurementId || window.location.protocol === "file:") return;
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = window.gtag || function gtag() {
+    window.dataLayer.push(arguments);
+  };
+  window.gtag("js", new Date());
+  window.gtag("config", gaMeasurementId, {
+    anonymize_ip: true,
+    send_page_view: false
+  });
+
+  const script = document.createElement("script");
+  script.async = true;
+  script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(gaMeasurementId)}`;
+  document.head.append(script);
+}
+
+function trackEvent(name, params = {}) {
+  const eventName = normalizeAnalyticsName(name);
+  if (!eventName) return;
+  const safeParams = sanitizeAnalyticsParams(params);
+
+  if (gaMeasurementId && typeof window.gtag === "function") {
+    window.gtag("event", eventName, safeParams);
+  }
+  recordInternalAnalyticsEvent(eventName, safeParams);
+}
+
+function trackArticleOpen(article = {}, destination = "pubmed") {
+  trackEvent("article_opened", {
+    destination,
+    has_pdf: Boolean(article.pdf?.url),
+    year: Number.parseInt(article.year, 10) || 0,
+    study_type: String(article.studyType || article.scoring?.evidenceLevel || "nao_informado").slice(0, 80)
+  });
+}
+
+function recordInternalAnalyticsEvent(name, params = {}) {
+  if (!internalAnalyticsEnabled || window.location.protocol === "file:") return;
+  const body = JSON.stringify({
+    name,
+    params,
+    path: window.location.pathname || "/",
+    timestamp: new Date().toISOString()
+  });
+  const url = apiUrl("/api/metrics/event");
+
+  if (navigator.sendBeacon) {
+    const sent = navigator.sendBeacon(url, new Blob([body], { type: "application/json" }));
+    if (sent) return;
+  }
+
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+    keepalive: true
+  }).catch(() => {});
+}
+
+function sanitizeAnalyticsParams(params = {}) {
+  const safe = {};
+  for (const [key, value] of Object.entries(params || {})) {
+    const normalizedKey = normalizeAnalyticsName(key);
+    if (!normalizedKey || isSensitiveAnalyticsKey(normalizedKey)) continue;
+    if (typeof value === "boolean") safe[normalizedKey] = value;
+    if (typeof value === "number" && Number.isFinite(value)) safe[normalizedKey] = value;
+    if (typeof value === "string") safe[normalizedKey] = value.slice(0, 120);
+  }
+  return safe;
+}
+
+function normalizeAnalyticsId(value) {
+  const normalized = String(value || "").trim();
+  return /^G-[A-Z0-9]+$/i.test(normalized) ? normalized : "";
+}
+
+function normalizeAnalyticsName(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
+}
+
+function isSensitiveAnalyticsKey(key) {
+  return /search|query|term|title|abstract|doi|pmid|email|token|key|secret|patient|nome/.test(key);
+}
+
+function classifyClientError(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  if (message.includes("failed to fetch")) return "network_failed";
+  if (message.includes("timeout")) return "timeout";
+  if (message.includes("json") || message.includes("resposta inválida")) return "invalid_response";
+  if (message.includes("ia") || message.includes("openai")) return "ai_response_error";
+  return "request_error";
 }
 
 function apiUrl(path) {

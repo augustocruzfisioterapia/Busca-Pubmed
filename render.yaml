@@ -37,6 +37,10 @@ services:
         value: 6
       - key: ALLOWED_ORIGIN
         value: https://www.temevidencia.com.br,https://temevidencia.com.br,https://busca-pubmed.onrender.com,https://augustocruzfisioterapia.github.io
+      - key: GA_MEASUREMENT_ID
+        sync: false
+      - key: ADMIN_METRICS_TOKEN
+        sync: false
       - key: NCBI_EMAIL
         sync: false
       - key: NCBI_API_KEY
