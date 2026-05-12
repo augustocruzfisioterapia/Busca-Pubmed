@@ -39,6 +39,7 @@ let targetResultCount = 10;
 let advancedTerms = [];
 let advancedTermId = 0;
 let discussionInFlight = false;
+let activeDiscussionMode = "clinico";
 const RETURN_RESTORE_KEY = "article-search-returning";
 const SETTINGS_VERSION = 4;
 const configuredApiBase = normalizeApiBase(window.BUSCA_PUBMED_API_BASE || "");
@@ -305,7 +306,11 @@ loadMoreButton?.addEventListener("click", async () => {
 discussEvidenceButton?.addEventListener("click", () => {
   if (!currentResult?.articles?.length) return;
   discussionPanel.hidden = false;
+  activeDiscussionMode = activeDiscussionMode || "clinico";
   renderDiscussionStack();
+  if (!currentResult.discussionBundle?.analyses) {
+    requestEvidenceDiscussion();
+  }
 });
 
 closeDiscussionButton?.addEventListener("click", () => {
@@ -318,8 +323,11 @@ discussionPanel?.addEventListener("click", (event) => {
 
 discussionModeButtons.forEach((button) => {
   button.addEventListener("click", async () => {
-    discussionModeButtons.forEach((item) => item.classList.toggle("active", item === button));
-    await requestEvidenceDiscussion(button.dataset.mode || "Clinico");
+    activeDiscussionMode = normalizeDiscussionMode(button.dataset.mode || "clinico");
+    renderDiscussionStack();
+    if (!currentResult?.discussionBundle?.analyses) {
+      await requestEvidenceDiscussion();
+    }
   });
 });
 
@@ -437,30 +445,35 @@ async function requestSearchUntilTarget(payload, targetTotal) {
   return result;
 }
 
-async function requestEvidenceDiscussion(mode) {
+async function requestEvidenceDiscussion() {
   if (!currentResult?.articles?.length || discussionInFlight) return;
 
   ensureDiscussionState();
   const articles = uniqueArticles(currentResult.articles || []).map(serializeArticleForDiscussion);
-  const signature = createDiscussionSignature(mode, articles);
-  const existing = currentResult.discussions.find((item) => item.signature === signature);
-  if (existing) {
+  const signature = createDiscussionSignature(articles);
+  if (currentResult.discussionBundle?.signature === signature) {
     renderDiscussionStack({
-      notice: "Esta análise já foi gerada para esta busca.",
-      highlightSignature: signature
+      notice: "Esta análise já foi gerada para esta busca."
     });
     return;
   }
 
   discussionInFlight = true;
-  setDiscussionBusy(true, "Gerando análise...", "A IA está revisando até 20 artigos, priorizando meta-análises, revisões sistemáticas e RCTs.");
+  setDiscussionBusy(true, "Gerando quatro interpretações...", "A IA está criando os modos Clínico, Pesquisador, Professor e Criador de Conteúdo em uma única chamada.");
   try {
     // Envia somente dados recuperados na busca atual; o backend aplica a selecao e as regras anti-extrapolacao.
     const payload = {
-      mode,
+      mode: activeDiscussionMode,
       query: queryToCopy(currentResult.query),
       articles,
-      maxArticles: 20
+      maxArticles: 20,
+      filters: {
+        searchText: activePayload?.searchText || "",
+        maxResults: activePayload?.maxResults || "",
+        freePdfOnly: Boolean(activePayload?.freePdfOnly),
+        prioritizeEvidence: Boolean(activePayload?.prioritizeEvidence),
+        applyClinicalFilter: Boolean(activePayload?.applyClinicalFilter)
+      }
     };
     const response = await fetch(apiUrl("/api/discuss-evidence"), {
       method: "POST",
@@ -472,13 +485,16 @@ async function requestEvidenceDiscussion(mode) {
       throw new Error(result?.error || "Não foi possível gerar a discussão das evidências.");
     }
 
-    const entry = normalizeDiscussionEntry(result, signature);
-    currentResult.discussions.unshift(entry);
-    currentResult.discussion = entry;
+    const bundle = normalizeDiscussionBundle(result, signature);
+    currentResult.discussionBundle = bundle;
+    currentResult.discussion = discussionEntryForMode(bundle, activeDiscussionMode);
     renderDiscussionStack();
     persistLastSearch(activePayload || formSnapshotPayload(), currentResult);
   } catch (error) {
-    renderDiscussionMessage("Não foi possível discutir as evidências.", error.message);
+    renderDiscussionMessage(
+      "Não foi possível gerar as interpretações.",
+      `${error.message || "O motor de IA não respondeu corretamente."} A busca continua disponível; tente novamente em alguns instantes.`
+    );
   } finally {
     discussionInFlight = false;
     setDiscussionBusy(false);
@@ -505,10 +521,29 @@ function serializeArticleForDiscussion(article = {}) {
 
 function ensureDiscussionState() {
   if (!currentResult) return;
-  if (Array.isArray(currentResult.discussions)) return;
-  currentResult.discussions = currentResult.discussion
-    ? [normalizeDiscussionEntry(currentResult.discussion, currentResult.discussion.signature || "legacy")]
-    : [];
+  if (currentResult.discussionBundle?.analyses) return;
+  if (currentResult.analyses) {
+    currentResult.discussionBundle = normalizeDiscussionBundle(currentResult, currentResult.signature || "legacy");
+    return;
+  }
+  if (currentResult.discussion?.analysisMarkdown) {
+    const mode = normalizeDiscussionMode(currentResult.discussion.mode || activeDiscussionMode);
+    currentResult.discussionBundle = {
+      id: "legacy",
+      signature: currentResult.discussion.signature || "legacy",
+      generatedAt: currentResult.discussion.generatedAt || new Date().toISOString(),
+      selectedCount: currentResult.discussion.selectedCount || currentResult.articles?.length || 0,
+      analyses: {
+        clinico: "",
+        pesquisador: "",
+        professor: "",
+        criador_conteudo: "",
+        [mode]: currentResult.discussion.analysisMarkdown
+      },
+      cache: currentResult.discussion.cache || null,
+      cost: currentResult.discussion.cost || null
+    };
+  }
 }
 
 function setDiscussionBusy(isBusy, title = "", body = "") {
@@ -522,7 +557,7 @@ function renderDiscussionMessage(title, body) {
   if (!discussionPlaceholder) return;
   discussionPlaceholder.hidden = false;
   discussionPlaceholder.innerHTML = `<strong>${escapeHtml(title)}</strong><p>${escapeHtml(body || "")}</p>`;
-  if (discussionResult && !currentResult?.discussions?.length) {
+  if (discussionResult && !currentResult?.discussionBundle?.analyses) {
     discussionResult.hidden = true;
   }
 }
@@ -530,35 +565,32 @@ function renderDiscussionMessage(title, body) {
 function renderDiscussionStack(options = {}) {
   if (!discussionResult) return;
   ensureDiscussionState();
-  const entries = currentResult?.discussions || [];
-  discussionModeButtons.forEach((button) => button.classList.remove("active"));
+  const bundle = currentResult?.discussionBundle || null;
+  discussionModeButtons.forEach((button) => {
+    button.classList.toggle("active", normalizeDiscussionMode(button.dataset.mode) === activeDiscussionMode);
+  });
   discussionResult.innerHTML = "";
 
   if (options.notice) {
-    renderDiscussionMessage(options.notice, "Reutilize o bloco já exibido abaixo para evitar nova chamada de IA e reduzir custo.");
-  } else if (!entries.length) {
+    renderDiscussionMessage(options.notice, "Troque os modos pelos botões acima; nenhuma nova chamada de IA será feita.");
+  } else if (!bundle?.analyses) {
     renderDiscussionMessage(
       "Escolha um modo de análise.",
-      "A resposta será baseada somente nos abstracts e metadados dos artigos retornados."
+      "Ao iniciar, a IA gera os quatro modos em uma única chamada e depois você alterna a visualização sem custo adicional."
     );
   } else {
     discussionPlaceholder.hidden = true;
   }
 
-  if (!entries.length) {
+  if (!bundle?.analyses) {
     discussionResult.hidden = true;
     return;
   }
 
   discussionResult.hidden = false;
-  entries
-    .slice()
-    .sort((a, b) => new Date(b.generatedAt || 0) - new Date(a.generatedAt || 0))
-    .forEach((entry) => {
-      discussionResult.append(createDiscussionCard(entry, {
-        highlighted: entry.signature === options.highlightSignature
-      }));
-    });
+  discussionResult.append(createDiscussionCard(discussionEntryForMode(bundle, activeDiscussionMode), {
+    highlighted: Boolean(options.notice)
+  }));
 }
 
 function createDiscussionCard(entry, { highlighted = false } = {}) {
@@ -592,7 +624,9 @@ function createDiscussionCard(entry, { highlighted = false } = {}) {
 
   const metaLine = document.createElement("p");
   metaLine.className = "discussion-meta";
-  metaLine.textContent = `${entry.selectedCount || 0} artigos analisados. Baseado apenas nos artigos retornados pela busca; nenhuma nova fonte foi adicionada.`;
+  const cacheText = entry.cache?.hit ? "Resposta servida do cache." : "Quatro modos gerados em uma chamada.";
+  const saved = entry.cost?.baselineCallsAvoidedPerDiscussion || 3;
+  metaLine.textContent = `${entry.selectedCount || 0} artigos analisados. ${cacheText} Economia estimada: ${saved} chamadas de IA evitadas em relação ao modelo anterior.`;
   card.append(metaLine);
 
   renderMarkdownBlock(entry.analysisMarkdown || "", card);
@@ -639,28 +673,65 @@ function renderMarkdownBlock(markdown, container) {
 function discussionModeLabel(mode) {
   return {
     Clinico: "Clínico",
+    clinico: "Clínico",
     Pesquisador: "Pesquisador",
+    pesquisador: "Pesquisador",
     Professor: "Professor",
-    Conteudo: "Conteúdo"
+    professor: "Professor",
+    Conteudo: "Criador de Conteúdo",
+    criador_conteudo: "Criador de Conteúdo"
   }[mode] || mode || "Clínico";
 }
 
-function normalizeDiscussionEntry(result = {}, signature = "") {
+function normalizeDiscussionBundle(result = {}, signature = "") {
+  const analyses = result.analyses || {};
   return {
     ...result,
-    id: result.id || `${result.mode || "modo"}-${result.generatedAt || Date.now()}-${Math.random().toString(36).slice(2)}`,
+    id: result.id || `bundle-${result.generatedAt || Date.now()}-${Math.random().toString(36).slice(2)}`,
     signature,
     generatedAt: result.generatedAt || new Date().toISOString(),
-    analysisMarkdown: result.analysisMarkdown || ""
+    analyses: {
+      clinico: String(analyses.clinico || result.clinico || ""),
+      pesquisador: String(analyses.pesquisador || result.pesquisador || ""),
+      professor: String(analyses.professor || result.professor || ""),
+      criador_conteudo: String(analyses.criador_conteudo || result.criador_conteudo || "")
+    }
   };
 }
 
-function createDiscussionSignature(mode, articles = []) {
+function discussionEntryForMode(bundle = {}, mode = "clinico") {
+  const normalizedMode = normalizeDiscussionMode(mode);
+  return {
+    id: `${bundle.id || "bundle"}-${normalizedMode}`,
+    signature: bundle.signature,
+    mode: normalizedMode,
+    generatedAt: bundle.generatedAt,
+    selectedCount: bundle.selectedCount,
+    analysisMarkdown: bundle.analyses?.[normalizedMode] || "",
+    cache: bundle.cache,
+    cost: bundle.cost
+  };
+}
+
+function normalizeDiscussionMode(value) {
+  return {
+    Clinico: "clinico",
+    clinico: "clinico",
+    Pesquisador: "pesquisador",
+    pesquisador: "pesquisador",
+    Professor: "professor",
+    professor: "professor",
+    Conteudo: "criador_conteudo",
+    criador_conteudo: "criador_conteudo"
+  }[String(value || "clinico")] || "clinico";
+}
+
+function createDiscussionSignature(articles = []) {
   const articleKey = articles
     .map((article) => String(article.pmid || article.doi || article.title || "").trim())
     .filter(Boolean)
     .join("|");
-  return `${mode || "Clinico"}::${articleKey}`;
+  return `${queryToCopy(currentResult?.query || {})}::${articleKey}`;
 }
 
 function formatDiscussionTimestamp(value) {

@@ -1,6 +1,6 @@
 {
-  "name": "Busca Cientifica PubMed",
-  "short_name": "Busca PubMed",
+  "name": "Tem Evidencia?",
+  "short_name": "Tem Evidencia?",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#f4f1eb",

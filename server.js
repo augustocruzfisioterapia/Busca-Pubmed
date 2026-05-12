@@ -12,6 +12,9 @@ const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || "0.0.0.0";
 const rateLimitWindowMs = Number(process.env.RATE_LIMIT_WINDOW_MS || 60_000);
 const rateLimitMax = Number(process.env.RATE_LIMIT_MAX || 20);
+const aiRateLimitWindowMs = Number(process.env.RATE_LIMIT_AI_WINDOW_MS || 10 * 60_000);
+const aiRateLimitMax = Number(process.env.RATE_LIMIT_AI_MAX || 6);
+const searchRateLimitMax = Number(process.env.RATE_LIMIT_SEARCH_MAX || rateLimitMax);
 const maxBodySize = Number(process.env.MAX_BODY_SIZE || 1_000_000);
 const rateLimitBuckets = new Map();
 
@@ -35,7 +38,7 @@ const server = http.createServer(async (req, res) => {
     if (req.url === "/api/health") {
       return sendJson(res, 200, {
         ok: true,
-        service: "article-evidence-search",
+        service: "tem-evidencia",
         version: process.env.npm_package_version || "0.1.0"
       });
     }
@@ -47,6 +50,12 @@ const server = http.createServer(async (req, res) => {
     if (req.url === "/api/search" && req.method === "POST") {
       const body = await readJsonBody(req);
       const result = await runArticleSearch(body);
+      console.info("[usage-search]", {
+        ip: clientIp(req),
+        returned: result.count?.returned || 0,
+        maxResults: body.maxResults,
+        freePdfOnly: Boolean(body.freePdfOnly)
+      });
       return sendJson(res, result.searchUnavailable ? 503 : 200, result);
     }
 
@@ -59,6 +68,12 @@ const server = http.createServer(async (req, res) => {
     if (req.url === "/api/discuss-evidence" && req.method === "POST") {
       const body = await readJsonBody(req);
       const result = await runEvidenceDiscussion(body);
+      console.info("[usage-ai]", {
+        ip: clientIp(req),
+        selectedCount: result.selectedCount,
+        cacheHit: Boolean(result.cache?.hit),
+        callsAvoided: result.cost?.baselineCallsAvoidedPerDiscussion || 0
+      });
       return sendJson(res, 200, result);
     }
 
@@ -102,7 +117,8 @@ async function serveStatic(req, res) {
     const ext = path.extname(target);
     res.writeHead(200, {
       "Content-Type": contentTypes[ext] || "application/octet-stream",
-      "Cache-Control": "no-store"
+      "Cache-Control": "no-store",
+      ...securityHeaders()
     });
     res.end(data);
   } catch {
@@ -114,26 +130,46 @@ function sendJson(res, status, payload) {
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
+    ...securityHeaders(),
     ...corsHeaders()
   });
   res.end(JSON.stringify(payload, null, 2));
 }
 
 function sendText(res, status, text) {
-  res.writeHead(status, { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders() });
+  res.writeHead(status, { "Content-Type": "text/plain; charset=utf-8", ...securityHeaders(), ...corsHeaders() });
   res.end(text);
 }
 
 function sendOptions(res) {
-  res.writeHead(204, corsHeaders());
+  res.writeHead(204, { ...securityHeaders(), ...corsHeaders() });
   res.end();
 }
 
 function corsHeaders() {
   return {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": process.env.ALLOWED_ORIGIN || "*",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type,Accept"
+  };
+}
+
+function securityHeaders() {
+  return {
+    "Content-Security-Policy": [
+      "default-src 'self'",
+      "script-src 'self'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data:",
+      "connect-src 'self' https://eutils.ncbi.nlm.nih.gov https://id.nlm.nih.gov https://api.mymemory.translated.net https://busca-pubmed.onrender.com",
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+      "form-action 'self'"
+    ].join("; "),
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()"
   };
 }
 
@@ -165,28 +201,38 @@ async function readJsonBody(req) {
 }
 
 function checkRateLimit(req, res) {
-  if (!Number.isFinite(rateLimitWindowMs) || !Number.isFinite(rateLimitMax) || rateLimitMax <= 0) {
+  const policy = rateLimitPolicy(req);
+  if (!Number.isFinite(policy.windowMs) || !Number.isFinite(policy.max) || policy.max <= 0) {
     return true;
   }
 
   const now = Date.now();
   const ip = clientIp(req);
-  const bucket = rateLimitBuckets.get(ip);
+  const key = `${ip}:${policy.name}`;
+  const bucket = rateLimitBuckets.get(key);
 
   if (!bucket || bucket.resetAt <= now) {
-    rateLimitBuckets.set(ip, { count: 1, resetAt: now + rateLimitWindowMs });
+    rateLimitBuckets.set(key, { count: 1, resetAt: now + policy.windowMs });
     cleanupRateLimitBuckets(now);
     return true;
   }
 
   bucket.count += 1;
-  if (bucket.count <= rateLimitMax) return true;
+  if (bucket.count <= policy.max) return true;
 
   const retryAfterSeconds = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+  console.warn("[rate-limit]", {
+    ip,
+    path: req.url,
+    policy: policy.name,
+    count: bucket.count,
+    retryAfterSeconds
+  });
   res.writeHead(429, {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
     "Retry-After": String(retryAfterSeconds),
+    ...securityHeaders(),
     ...corsHeaders()
   });
   res.end(JSON.stringify({
@@ -195,6 +241,17 @@ function checkRateLimit(req, res) {
     retryAfterSeconds
   }));
   return false;
+}
+
+function rateLimitPolicy(req) {
+  const url = req.url || "";
+  if (url.startsWith("/api/discuss-evidence")) {
+    return { name: "ai", windowMs: aiRateLimitWindowMs, max: aiRateLimitMax };
+  }
+  if (url.startsWith("/api/search")) {
+    return { name: "search", windowMs: rateLimitWindowMs, max: searchRateLimitMax };
+  }
+  return { name: "api", windowMs: rateLimitWindowMs, max: rateLimitMax };
 }
 
 function cleanupRateLimitBuckets(now) {

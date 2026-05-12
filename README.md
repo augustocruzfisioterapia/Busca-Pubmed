@@ -1,6 +1,8 @@
-# Busca Avancada de Evidencias Cientificas na PubMed
+# Tem Evidencia?
 
-Aplicacao web/local para buscar artigos cientificos na PubMed com apoio a termos em portugues, MeSH Terms, auditoria de links e leitura estruturada dos resultados.
+Protegendo pacientes do "eu acho".
+
+Aplicacao web/local para buscar artigos cientificos na PubMed com apoio a termos em portugues, MeSH Terms, auditoria de links e interpretacao por IA orientada a pratica baseada em evidencia.
 
 ## Como rodar
 
@@ -40,7 +42,9 @@ reiniciar-servidor.cmd
   - link PubMed;
   - PDF PMC quando identificado com seguranca;
   - auditoria de tentativas de PDF.
-- O botao `Discutir as evidencias` usa IA, quando configurada, para sintetizar ate 20 artigos retornados pela busca, com cautela metodologica, limitacoes obrigatorias e sem extrapolar alem dos abstracts/metadados fornecidos.
+- O botao de interpretacao por IA gera quatro modos em uma unica chamada: Clinico, Pesquisador, Professor e Criador de Conteudo.
+- A resposta da IA e armazenada em cache por 7 dias para reduzir custo e latencia em buscas equivalentes.
+- Os prompts e a logica central ficam no backend; o frontend apenas alterna a visualizacao dos modos.
 - Se nenhum artigo for encontrado, a aplicacao oferece pesquisar a query diretamente na PubMed oficial.
 
 ## Comportamento anti-falha
@@ -73,7 +77,7 @@ OPENAI_API_KEY=sua-chave-openai
 
 `NCBI_API_KEY` aumenta o limite de uso das E-utilities de 3 para ate 10 requisicoes por segundo, conforme as regras do NCBI. Para gerar a chave, entre na sua conta NCBI e acesse `Account settings` > `API Key Management`.
 
-`OPENAI_API_KEY` habilita o painel `Discutir as evidencias`. Sem essa variavel, a busca continua funcionando normalmente e apenas a discussao por IA fica indisponivel.
+`OPENAI_API_KEY` habilita o painel de interpretacao por IA. Sem essa variavel, a busca continua funcionando normalmente e apenas a interpretacao por IA fica indisponivel.
 
 O plano gratuito serve para teste publico inicial, mas pode entrar em modo de espera quando fica sem acesso. Para uma ferramenta publica com uso real, use um plano sempre ativo.
 
@@ -119,10 +123,16 @@ UNPAYWALL_EMAIL=
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4.1-mini
 OPENAI_TIMEOUT_MS=45000
-OPENAI_MAX_OUTPUT_TOKENS=1500
+OPENAI_MAX_OUTPUT_TOKENS=3600
+OPENAI_ESTIMATED_CALL_COST_USD=0.01
+AI_CACHE_TTL_MS=604800000
 RATE_LIMIT_WINDOW_MS=60000
 RATE_LIMIT_MAX=20
+RATE_LIMIT_SEARCH_MAX=20
+RATE_LIMIT_AI_WINDOW_MS=600000
+RATE_LIMIT_AI_MAX=6
 MAX_BODY_SIZE=1000000
+ALLOWED_ORIGIN=
 ```
 
 ## Regras de links

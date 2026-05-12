@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Aplicacao local/PWA para busca rigorosa de artigos no PubMed com auditoria de PDF e extracao cientifica.",
+  "description": "Tem Evidencia? Busca PubMed com auditoria cientifica e interpretacao por IA.",
   "scripts": {
     "start": "node server.js",
     "check": "node --check server.js && node --check src/core/articleScoring.mjs && node --check src/core/evidenceDiscussion.mjs && node --check src/core/extractors.mjs && node --check src/core/journalMetrics.mjs && node --check src/core/onlineTermResolver.mjs && node --check src/core/pdfResolver.mjs && node --check src/core/pipeline.mjs && node --check src/core/pubmedClient.mjs && node --check src/core/queryBuilder.mjs && node --check src/core/termResolver.mjs && node --check src/core/validation.mjs && node --check public/app.js",

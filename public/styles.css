@@ -173,6 +173,14 @@ button:disabled {
   line-height: 1.05;
 }
 
+.search-copy p {
+  max-width: 620px;
+  margin: 12px 0 0;
+  color: rgba(246, 249, 244, 0.86);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
 .search-form {
   background: var(--panel);
   color: var(--ink);

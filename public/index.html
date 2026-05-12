@@ -4,7 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#13332d">
-    <title>Busca Avançada de Evidências Científicas na Pubmed</title>
+    <meta name="description" content="Tem Evidência? aproxima a prática clínica da PubMed para proteger pacientes do achismo com busca científica, leitura crítica e interpretação por IA.">
+    <title>Tem Evidência? | Protegendo pacientes do eu acho</title>
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="stylesheet" href="styles.css?v=20260429-1">
   </head>
@@ -21,8 +22,8 @@
               </svg>
             </div>
             <div>
-              <strong>Busca PubMed</strong>
-              <span>evidência clínica auditável</span>
+              <strong>Tem Evidência?</strong>
+              <span>Protegendo pacientes do “eu acho”.</span>
             </div>
           </div>
           <div class="nav-actions">
@@ -32,7 +33,8 @@
 
         <section class="search-card" aria-label="Busca de artigos">
           <div class="search-copy">
-            <h1>Busca Avançada de Evidências Científicas na Pubmed</h1>
+            <h1>Tem Evidência?</h1>
+            <p>Busca avançada na PubMed para transformar ciência em decisão clínica melhor fundamentada.</p>
           </div>
 
           <form id="search-form" class="search-form">
@@ -154,7 +156,7 @@
           <div class="result-actions">
             <button id="copy-query" class="secondary-button compact-button" type="button">Copiar query</button>
             <button id="copy-doi-list" class="secondary-button compact-button" type="button">Copiar lista de DOI</button>
-            <button id="discuss-evidence" class="secondary-button discuss-button" type="button">Discutir as evidências</button>
+            <button id="discuss-evidence" class="secondary-button discuss-button" type="button">Interpretar com IA</button>
           </div>
         </section>
         <p class="ranking-note" id="ranking-note" hidden>O ranking é uma organização auxiliar baseada nos metadados disponíveis no PubMed e não substitui avaliação crítica metodológica completa.</p>
@@ -182,16 +184,16 @@
     <div class="modal-backdrop" id="discussion-panel" hidden>
       <section class="discussion-modal" role="dialog" aria-modal="true" aria-labelledby="discussion-title">
         <div class="panel-heading">
-          <h2 id="discussion-title">Discutir as evidências</h2>
+          <h2 id="discussion-title">Interpretar evidências</h2>
           <button id="close-discussion" type="button">Fechar</button>
         </div>
         <div class="discussion-body">
-          <p>Escolha o modo de análise. A IA usará apenas os artigos retornados pela busca, priorizando nível de evidência e mantendo cautela científica.</p>
+          <p>A IA gera quatro leituras em uma única chamada: decisão clínica, crítica científica, ensino e comunicação. A análise usa apenas os artigos retornados pela busca.</p>
           <div class="discussion-modes" role="group" aria-label="Modo de análise">
-            <button type="button" data-mode="Clinico">Clínico</button>
-            <button type="button" data-mode="Pesquisador">Pesquisador</button>
-            <button type="button" data-mode="Professor">Professor</button>
-            <button type="button" data-mode="Conteudo">Conteúdo</button>
+            <button type="button" data-mode="clinico">Clínico</button>
+            <button type="button" data-mode="pesquisador">Pesquisador</button>
+            <button type="button" data-mode="professor">Professor</button>
+            <button type="button" data-mode="criador_conteudo">Criador de Conteúdo</button>
           </div>
           <div id="discussion-placeholder" class="discussion-placeholder" hidden></div>
           <div id="discussion-result" class="discussion-result" hidden></div>
