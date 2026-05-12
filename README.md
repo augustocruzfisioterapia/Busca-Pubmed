@@ -42,9 +42,9 @@ reiniciar-servidor.cmd
   - link PubMed;
   - PDF PMC quando identificado com seguranca;
   - auditoria de tentativas de PDF.
-- O botao de interpretacao por IA gera quatro modos em uma unica chamada: Clinico, Pesquisador, Professor e Criador de Conteudo.
-- A resposta da IA e armazenada em cache por 7 dias para reduzir custo e latencia em buscas equivalentes.
-- Os prompts e a logica central ficam no backend; o frontend apenas alterna a visualizacao dos modos.
+- O botao de interpretacao por IA permite escolher um perfil por vez: Clinico, Pesquisador, Professor ou Criador de Conteudo.
+- Cada perfil e gerado em chamada propria, com maior profundidade, e fica em cache por 7 dias para reduzir custo e latencia em buscas equivalentes.
+- Os prompts e a logica central ficam no backend; o frontend apenas alterna entre perfis ja gerados ou solicita o perfil ativo.
 - Se nenhum artigo for encontrado, a aplicacao oferece pesquisar a query diretamente na PubMed oficial.
 
 ## Comportamento anti-falha
@@ -123,7 +123,7 @@ UNPAYWALL_EMAIL=
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4.1-mini
 OPENAI_TIMEOUT_MS=45000
-OPENAI_MAX_OUTPUT_TOKENS=6200
+OPENAI_MAX_OUTPUT_TOKENS=4200
 OPENAI_ESTIMATED_CALL_COST_USD=0.01
 AI_CACHE_TTL_MS=604800000
 RATE_LIMIT_WINDOW_MS=60000

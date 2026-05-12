@@ -527,16 +527,18 @@ test("buildEvidenceDiscussionPrompt inclui regras cientificas obrigatorias", () 
 
   assert.match(prompt, /## 1\./);
   assert.match(prompt, /## 4\./);
-  assert.match(prompt, /Base obrigatoria para todos os modos/);
+  assert.match(prompt, /Perfil solicitado: Clinico/);
+  assert.match(prompt, /Gere exclusivamente o perfil solicitado/);
+  assert.match(prompt, /Base obrigatoria para este perfil/);
   assert.match(prompt, /Profundidade e utilidade esperadas/);
-  assert.match(prompt, /cada modo deve ter 450 a 700 palavras/);
-  assert.match(prompt, /Nao entregue respostas superficiais/);
+  assert.match(prompt, /900 a 1400 palavras/);
+  assert.match(prompt, /Gere somente o perfil solicitado/);
   assert.match(prompt, /Direcao dos achados: beneficio, neutro ou dano/);
   assert.match(prompt, /N\/tamanho amostral quando disponivel/);
   assert.match(prompt, /Relevancia estatistica/);
   assert.match(prompt, /Tem Evidencia/);
   assert.match(prompt, /Retorne somente JSON valido/);
-  assert.match(prompt, /"clinico", "pesquisador", "professor", "criador_conteudo"/);
+  assert.match(prompt, /"mode" e "analysisMarkdown"/);
   assert.match(prompt, /MODO CLINICO \(DECISAO\)/);
   assert.match(prompt, /profissional decidindo na UTI agora/);
   assert.match(prompt, /Deve ser considerado, Indicado quando, Evitar em pacientes com, Nao recomendado quando/);
@@ -545,8 +547,8 @@ test("buildEvidenceDiscussionPrompt inclui regras cientificas obrigatorias", () 
   assert.match(prompt, /## 2\. Quando aplicar/);
   assert.match(prompt, /## 3\. Quando evitar/);
   assert.match(prompt, /## 4\. Riscos importantes/);
-  assert.match(prompt, /Cada modo deve ignorar completamente o estilo dos outros modos/);
-  assert.match(prompt, /similares em mais de 40%/);
+  assert.match(prompt, /Regra critica de foco/);
+  assert.doesNotMatch(prompt, /MODO PESQUISADOR/);
   assert.match(prompt, /Nao invente informacoes ausentes/);
   assert.match(prompt, /Nao afirme conclusoes absolutas/);
   assert.match(prompt, /Nao adicione, cite ou sugira estudos externos/);
@@ -559,7 +561,7 @@ test("buildEvidenceDiscussionPrompt inclui regras cientificas obrigatorias", () 
   assert.doesNotMatch(prompt, /undefined/);
 });
 
-test("buildEvidenceDiscussionPrompt inclui estruturas exclusivas dos quatro modos", () => {
+test("buildEvidenceDiscussionPrompt gera somente a estrutura do perfil solicitado", () => {
   const articles = prepareEvidenceDiscussionArticles([
     {
       pmid: "12",
@@ -570,21 +572,16 @@ test("buildEvidenceDiscussionPrompt inclui estruturas exclusivas dos quatro modo
     }
   ]);
 
-  const prompt = buildEvidenceDiscussionPrompt({ query: "support", articles });
+  const prompt = buildEvidenceDiscussionPrompt({ mode: "Pesquisador", query: "support", articles });
 
   assert.match(prompt, /MODO PESQUISADOR \(CRITICO\)/);
   assert.match(prompt, /O principal vies aqui e, A evidencia e limitada porque, A confianca nesses resultados e/);
   assert.match(prompt, /Aprofunde desenho, vies, estatistica, validade externa/);
   assert.match(prompt, /## 1\. Qualidade da evidencia/);
   assert.match(prompt, /## 4\. Grau de confiabilidade/);
-  assert.match(prompt, /MODO PROFESSOR \(ENSINO\)/);
-  assert.match(prompt, /professor ensinando o raciocinio passo a passo/);
-  assert.match(prompt, /## 1\. Explicacao do fenomeno/);
-  assert.match(prompt, /## 4\. Onde os alunos costumam errar/);
-  assert.match(prompt, /MODO CONTEUDO \(COMUNICACAO\)/);
-  assert.match(prompt, /Transforme os achados em mensagem/);
-  assert.match(prompt, /## 1\. Mensagem principal/);
-  assert.match(prompt, /## 2\. 3 insights principais/);
+  assert.doesNotMatch(prompt, /MODO PROFESSOR/);
+  assert.doesNotMatch(prompt, /MODO CONTEUDO/);
+  assert.doesNotMatch(prompt, /MODO CLINICO/);
 });
 
 test("runEvidenceDiscussion chama Responses API com artigos retornados pela busca", async () => {
@@ -611,10 +608,8 @@ test("runEvidenceDiscussion chama Responses API com artigos retornados pela busc
       capturedBody = JSON.parse(options.body);
       return jsonResponse({
         output_text: JSON.stringify({
-          clinico: "## 1. O que isso muda na pratica\nDeve ser considerado apenas com cautela.\n## 2. Quando aplicar\nIndicado quando os dados forem compatíveis.\n## 3. Quando evitar\nNao recomendado quando houver incerteza relevante.\n## 4. Riscos importantes\nOs dados disponiveis sao limitados.",
-          pesquisador: "## 1. Qualidade da evidencia\nA evidencia e limitada porque o abstract e curto.\n## 2. Principais vieses\nO principal vies aqui e a falta de detalhes.\n## 3. Limitacoes metodologicas\nN e desenho precisam ser avaliados.\n## 4. Grau de confiabilidade\nA confianca nesses resultados e moderada a baixa.",
-          professor: "## 1. Explicacao do fenomeno\nVamos interpretar passo a passo.\n## 2. Como interpretar os resultados\nObserve N, direcao e desenho.\n## 3. O que isso significa na pratica\nSignifica uma hipotese a ser aplicada com cautela.\n## 4. Onde os alunos costumam errar\nConfundir associacao com causalidade.",
-          criador_conteudo: "## 1. Mensagem principal\nEvidencia reduz achismo.\n## 2. 3 insights principais\n- Insight um.\n- Insight dois.\n- Insight tres.\n## 3. Frases utilizaveis\nMenos achismo, mais dado.\n## 4. Como comunicar isso para leigos/profissionais\nFale simples sem distorcer."
+          mode: "pesquisador",
+          analysisMarkdown: "## 1. Qualidade da evidencia\nA evidencia e limitada porque o abstract e curto.\n## 2. Principais vieses\nO principal vies aqui e a falta de detalhes.\n## 3. Limitacoes metodologicas\nN e desenho precisam ser avaliados.\n## 4. Grau de confiabilidade\nA confianca nesses resultados e moderada a baixa."
         })
       });
     }
@@ -622,15 +617,17 @@ test("runEvidenceDiscussion chama Responses API com artigos retornados pela busc
 
   assert.equal(capturedUrl, "https://api.openai.com/v1/responses");
   assert.equal(capturedBody.model, "test-model");
-  assert.equal(capturedBody.max_output_tokens, 6200);
+  assert.equal(capturedBody.max_output_tokens, 4200);
   assert.equal(capturedBody.text.format.type, "json_schema");
   assert.match(capturedBody.instructions, /Use exclusivamente os artigos fornecidos/);
   assert.match(capturedBody.input, /PMID: 99/);
   assert.match(capturedBody.input, /## 1\. Qualidade da evidencia/);
+  assert.doesNotMatch(capturedBody.input, /## 1\. O que isso muda na pratica/);
   assert.match(capturedBody.input, /Tamanho amostral identificado: 120/);
   assert.equal(result.selectedCount, 1);
-  assert.ok(result.analyses.clinico);
-  assert.ok(result.analyses.criador_conteudo);
+  assert.equal(result.mode, "pesquisador");
+  assert.ok(result.analyses.pesquisador);
+  assert.equal(result.analyses.clinico, undefined);
   assert.match(result.analysisMarkdown, /Qualidade da evidencia/);
 });
 
@@ -655,21 +652,19 @@ test("runEvidenceDiscussion refaz chamada compacta quando resposta vem incomplet
       calls += 1;
       const body = JSON.parse(options.body);
       if (calls === 1) {
-        assert.equal(body.max_output_tokens, 6200);
+        assert.equal(body.max_output_tokens, 4200);
         return jsonResponse({
           status: "incomplete",
           incomplete_details: { reason: "max_output_tokens" },
-          output_text: JSON.stringify({ clinico: "## 1. O que isso muda na pratica\nTexto cortado no meio" })
+          output_text: JSON.stringify({ mode: "clinico", analysisMarkdown: "## 1. O que isso muda na pratica\nTexto cortado no meio" })
         });
       }
 
       assert.match(body.input, /MODO COMPACTO/);
       return jsonResponse({
         output_text: JSON.stringify({
-          clinico: "## 1. O que isso muda na pratica\nDeve ser considerado com cautela.\n## 2. Quando aplicar\nIndicado quando o perfil for semelhante.\n## 3. Quando evitar\nEvitar em pacientes com dados incompatíveis.\n## 4. Riscos importantes\nOs dados disponiveis sao limitados.",
-          pesquisador: "## 1. Qualidade da evidencia\nA evidencia e limitada porque faltam detalhes.\n## 2. Principais vieses\nO principal vies aqui e a incerteza dos metadados.\n## 3. Limitacoes metodologicas\nHa limitacoes metodologicas relevantes.\n## 4. Grau de confiabilidade\nA confianca nesses resultados e cautelosa.",
-          professor: "## 1. Explicacao do fenomeno\nA leitura deve ser progressiva.\n## 2. Como interpretar os resultados\nObserve desenho, N e direcao.\n## 3. O que isso significa na pratica\nNao significa certeza.\n## 4. Onde os alunos costumam errar\nConfundir resultado com recomendacao.",
-          criador_conteudo: "## 1. Mensagem principal\nDados reduzem achismo.\n## 2. 3 insights principais\n- Um.\n- Dois.\n- Tres.\n## 3. Frases utilizaveis\nCuidado sem dado vira opiniao.\n## 4. Como comunicar isso para leigos/profissionais\nSimplifique sem prometer."
+          mode: "clinico",
+          analysisMarkdown: "## 1. O que isso muda na pratica\nDeve ser considerado com cautela.\n## 2. Quando aplicar\nIndicado quando o perfil for semelhante.\n## 3. Quando evitar\nEvitar em pacientes com dados incompatíveis.\n## 4. Riscos importantes\nOs dados disponiveis sao limitados."
         })
       });
     }

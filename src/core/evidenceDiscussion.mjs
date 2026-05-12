@@ -5,9 +5,10 @@ const runtimeEnv = typeof process !== "undefined" ? process.env : {};
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const DISCUSSION_MODES = ["clinico", "pesquisador", "professor", "criador_conteudo"];
 const VALID_INPUT_MODES = new Set(["Clinico", "Pesquisador", "Professor", "Conteudo", ...DISCUSSION_MODES]);
-const DEFAULT_MAX_OUTPUT_TOKENS = 6200;
+const DEFAULT_MAX_OUTPUT_TOKENS = 4200;
 const DEFAULT_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const discussionCache = new Map();
+const pendingDiscussionRequests = new Map();
 const cacheStats = {
   callsAvoided: 0,
   estimatedUsdSaved: 0,
@@ -86,10 +87,10 @@ const MODE_RESPONSE_STRUCTURES = {
 };
 
 const DEPTH_REQUIREMENTS = [
-  "Mantenha uma unica chamada e gere os quatro modos completos no mesmo JSON.",
-  "Nao entregue respostas superficiais: cada modo deve ter profundidade propria e utilidade concreta para seu perfil.",
-  "Cada secao deve ter conteudo suficiente para orientar uso real: em geral 2 a 4 frases ou bullets densos por secao.",
-  "Evite copiar a mesma conclusao nos quatro modos; mude o raciocinio, a prioridade e a forma de apresentar a evidencia.",
+  "Gere somente o perfil solicitado, com profundidade maior do que um resumo rapido.",
+  "Cada secao deve ter conteudo suficiente para orientar uso real: em geral 3 a 6 frases ou bullets densos por secao.",
+  "O texto deve parecer escrito especificamente para o perfil solicitado, com raciocinio, tom e prioridade proprios.",
+  "Evite bullets excessivamente curtos; use explicacoes completas quando a evidencia permitir.",
   "Quando os artigos nao trouxerem detalhes suficientes, aprofunde a limitacao e explique o que falta, sem inventar."
 ];
 
@@ -120,12 +121,10 @@ const SCIENTIFIC_GUARDRAILS = [
 const ANALYSIS_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: DISCUSSION_MODES,
+  required: ["mode", "analysisMarkdown"],
   properties: {
-    clinico: { type: "string" },
-    pesquisador: { type: "string" },
-    professor: { type: "string" },
-    criador_conteudo: { type: "string" }
+    mode: { type: "string", enum: DISCUSSION_MODES },
+    analysisMarkdown: { type: "string" }
   }
 };
 
@@ -143,6 +142,7 @@ export async function runEvidenceDiscussion(input = {}, deps = {}) {
   }
 
   const cacheKey = createDiscussionCacheKey({
+    mode,
     query: input.query || "",
     filters: input.filters || input.searchContext || {},
     articles
@@ -159,6 +159,9 @@ export async function runEvidenceDiscussion(input = {}, deps = {}) {
       }
     };
   }
+  if (pendingDiscussionRequests.has(cacheKey)) {
+    return pendingDiscussionRequests.get(cacheKey);
+  }
 
   const apiKey = deps.openaiApiKey || runtimeEnv.OPENAI_API_KEY || "";
   if (!apiKey) {
@@ -171,15 +174,18 @@ export async function runEvidenceDiscussion(input = {}, deps = {}) {
   const model = deps.model || runtimeEnv.OPENAI_MODEL || "gpt-4.1-mini";
   const maxOutputTokens = normalizeMaxOutputTokens(deps.maxOutputTokens || runtimeEnv.OPENAI_MAX_OUTPUT_TOKENS);
   const prompt = buildEvidenceDiscussionPrompt({
+    mode,
     query: input.query || "",
     articles
   });
 
-  const rawAnalyses = await createOpenAIAnalyses({
+  const discussionTask = createOpenAIAnalysis({
     apiKey,
     model,
+    mode,
     prompt,
     compactPrompt: buildEvidenceDiscussionPrompt({
+      mode,
       query: input.query || "",
       articles,
       compact: true
@@ -187,44 +193,51 @@ export async function runEvidenceDiscussion(input = {}, deps = {}) {
     fetchImpl: deps.fetchImpl || fetch,
     timeoutMs: Number(runtimeEnv.OPENAI_TIMEOUT_MS || 45_000),
     maxOutputTokens
+  }).then((analysisMarkdown) => {
+    const generatedAt = new Date().toISOString();
+    const result = {
+      ok: true,
+      generatedAt,
+      mode,
+      modes: DISCUSSION_MODES,
+      model,
+      selectedCount: articles.length,
+      selectedArticles: articles.map(({ pmid, title, year, studyType, evidenceLevel, sampleSize }) => ({
+        pmid,
+        title,
+        year,
+        studyType,
+        evidenceLevel,
+        sampleSize
+      })),
+      analysisMarkdown,
+      analyses: {
+        [mode]: analysisMarkdown
+      },
+      credit: {
+        source: "platform_pool",
+        unitsCharged: 1,
+        futureSources: ["daily_free", "sponsored", "institutional"],
+        note: "Estrutura preparada para creditos patrocinados sem cobranca direta do usuario final."
+      },
+      cost: estimateCostSavings(),
+      cache: {
+        hit: false,
+        key: cacheKey,
+        mode,
+        expiresAt: new Date(Date.now() + cacheTtlMs()).toISOString(),
+        metrics: { ...cacheStats }
+      }
+    };
+
+    writeDiscussionCache(cacheKey, result);
+    return result;
+  }).finally(() => {
+    pendingDiscussionRequests.delete(cacheKey);
   });
 
-  const analyses = normalizeAnalyses(rawAnalyses);
-  const generatedAt = new Date().toISOString();
-  const result = {
-    ok: true,
-    generatedAt,
-    mode,
-    modes: DISCUSSION_MODES,
-    model,
-    selectedCount: articles.length,
-    selectedArticles: articles.map(({ pmid, title, year, studyType, evidenceLevel, sampleSize }) => ({
-      pmid,
-      title,
-      year,
-      studyType,
-      evidenceLevel,
-      sampleSize
-    })),
-    analyses,
-    analysisMarkdown: analyses[mode] || analyses.clinico,
-    credit: {
-      source: "platform_pool",
-      unitsCharged: 1,
-      futureSources: ["daily_free", "sponsored", "institutional"],
-      note: "Estrutura preparada para creditos patrocinados sem cobranca direta do usuario final."
-    },
-    cost: estimateCostSavings(),
-    cache: {
-      hit: false,
-      key: cacheKey,
-      expiresAt: new Date(Date.now() + cacheTtlMs()).toISOString(),
-      metrics: { ...cacheStats }
-    }
-  };
-
-  writeDiscussionCache(cacheKey, result);
-  return result;
+  pendingDiscussionRequests.set(cacheKey, discussionTask);
+  return discussionTask;
 }
 
 export function prepareEvidenceDiscussionArticles(articles = [], options = {}) {
@@ -238,23 +251,27 @@ export function prepareEvidenceDiscussionArticles(articles = [], options = {}) {
     .slice(0, limit);
 }
 
-export function buildEvidenceDiscussionPrompt({ query, articles, compact = false }) {
+export function buildEvidenceDiscussionPrompt({ mode = "clinico", query, articles, compact = false }) {
+  const modeKey = normalizeMode(mode);
   const articleBlocks = articles.map(formatArticleForPrompt).join("\n\n");
   const sizeInstruction = compact
-    ? "MODO COMPACTO: responda com cada modo em 250 a 350 palavras, mantendo a estrutura exclusiva e completando todas as secoes."
-    : "Responda com profundidade moderada: cada modo deve ter 450 a 700 palavras quando houver dados suficientes, sem redundancia e sem padrao academico repetido.";
+    ? "MODO COMPACTO: responda em 550 a 800 palavras, mantendo a estrutura do perfil solicitado e completando todas as secoes."
+    : "Responda com profundidade alta: produza uma interpretacao completa para o perfil solicitado, em geral 900 a 1400 palavras quando houver dados suficientes, sem redundancia e sem enchimento.";
 
   return [
-    "Tarefa: gerar quatro interpretacoes diferentes dos mesmos artigos retornados pela plataforma Tem Evidencia?.",
+    "Tarefa: gerar uma interpretacao cientifica aprofundada para a plataforma Tem Evidencia?.",
+    `Perfil solicitado: ${MODE_RESPONSE_STRUCTURES[modeKey].label}.`,
+    "Gere exclusivamente o perfil solicitado. Nao gere, resuma ou antecipe os outros perfis.",
     query ? `Query/contexto da busca: ${query}` : "",
     sizeInstruction,
     "",
     "Formato de saida obrigatorio:",
     "Retorne somente JSON valido, sem markdown fora dos valores.",
-    'Use exatamente as chaves: "clinico", "pesquisador", "professor", "criador_conteudo".',
-    "Cada valor deve ser uma string em markdown, com a estrutura especifica daquele modo.",
+    'Use exatamente as chaves: "mode" e "analysisMarkdown".',
+    `O valor de "mode" deve ser "${modeKey}".`,
+    'O valor de "analysisMarkdown" deve ser uma string em markdown, com a estrutura especifica do perfil solicitado.',
     "",
-    "Base obrigatoria para todos os modos:",
+    "Base obrigatoria para este perfil:",
     ...SHARED_MODE_REQUIREMENTS.map((rule) => `- ${rule}`),
     "",
     "Profundidade e utilidade esperadas:",
@@ -263,12 +280,12 @@ export function buildEvidenceDiscussionPrompt({ query, articles, compact = false
     "Regras cientificas e de seguranca:",
     ...SCIENTIFIC_GUARDRAILS.map((rule) => `- ${rule}`),
     "",
-    "Regra critica de diferenciacao:",
-    "- Cada modo deve ignorar completamente o estilo dos outros modos.",
-    "- Nao reutilize o mesmo paragrafo, mesma sequencia argumentativa ou mesmo tom nos quatro campos.",
-    "- Se duas respostas ficarem similares em mais de 40%, reescreva uma delas antes de responder.",
+    "Regra critica de foco:",
+    "- Ignore completamente a estrutura dos outros perfis.",
+    "- A resposta deve parecer feita sob medida para o perfil solicitado.",
+    "- Nao escreva um resumo generico que serviria para qualquer publico.",
     "",
-    ...DISCUSSION_MODES.flatMap((modeKey) => formatModeInstructions(modeKey)),
+    ...formatModeInstructions(modeKey),
     "",
     "Artigos fornecidos:",
     articleBlocks
@@ -354,7 +371,7 @@ function formatArticleForPrompt(article, index) {
   ].filter(Boolean).join("\n");
 }
 
-async function createOpenAIAnalyses({ apiKey, model, prompt, compactPrompt, fetchImpl, timeoutMs, maxOutputTokens }) {
+async function createOpenAIAnalysis({ apiKey, model, mode, prompt, compactPrompt, fetchImpl, timeoutMs, maxOutputTokens }) {
   const first = await requestOpenAIAnalysis({
     apiKey,
     model,
@@ -364,8 +381,8 @@ async function createOpenAIAnalyses({ apiKey, model, prompt, compactPrompt, fetc
     maxOutputTokens
   });
 
-  let parsed = parseAnalysesPayload(first);
-  if (isIncompleteResponse(first) || hasMissingModes(parsed)) {
+  let parsed = parseAnalysisPayload(first, mode);
+  if (isIncompleteResponse(first) || hasMissingAnalysis(parsed)) {
     const retry = await requestOpenAIAnalysis({
       apiKey,
       model,
@@ -374,10 +391,10 @@ async function createOpenAIAnalyses({ apiKey, model, prompt, compactPrompt, fetc
       timeoutMs,
       maxOutputTokens
     });
-    parsed = parseAnalysesPayload(retry);
+    parsed = parseAnalysisPayload(retry, mode);
   }
 
-  return parsed;
+  return completeModeAnalysis(parsed.analysisMarkdown || "", mode);
 }
 
 async function requestOpenAIAnalysis({ apiKey, model, prompt, fetchImpl, timeoutMs, maxOutputTokens }) {
@@ -401,7 +418,7 @@ async function requestOpenAIAnalysis({ apiKey, model, prompt, fetchImpl, timeout
       text: {
         format: {
           type: "json_schema",
-          name: "tem_evidencia_discussion",
+          name: "tem_evidencia_discussion_profile",
           strict: true,
           schema: ANALYSIS_SCHEMA
         }
@@ -414,21 +431,29 @@ async function requestOpenAIAnalysis({ apiKey, model, prompt, fetchImpl, timeout
   return response.json();
 }
 
-function parseAnalysesPayload(data = {}) {
+function parseAnalysisPayload(data = {}, mode = "clinico") {
   const text = extractResponseText(data);
   if (!text) return {};
 
   try {
-    return JSON.parse(text);
+    return normalizeAnalysisPayload(JSON.parse(text), mode);
   } catch {
     const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return {};
+    if (!match) return { mode, analysisMarkdown: text };
     try {
-      return JSON.parse(match[0]);
+      return normalizeAnalysisPayload(JSON.parse(match[0]), mode);
     } catch {
-      return {};
+      return { mode, analysisMarkdown: text };
     }
   }
+}
+
+function normalizeAnalysisPayload(value = {}, mode = "clinico") {
+  const modeKey = normalizeMode(value.mode || mode);
+  return {
+    mode: modeKey,
+    analysisMarkdown: String(value.analysisMarkdown || value[modeKey] || "").trim()
+  };
 }
 
 function extractResponseText(data = {}) {
@@ -442,14 +467,6 @@ function extractResponseText(data = {}) {
     }
   }
   return chunks.join("\n").trim();
-}
-
-function normalizeAnalyses(value = {}) {
-  const analyses = {};
-  for (const modeKey of DISCUSSION_MODES) {
-    analyses[modeKey] = completeModeAnalysis(String(value[modeKey] || "").trim(), modeKey);
-  }
-  return analyses;
 }
 
 function completeModeAnalysis(value = "", modeKey = "clinico") {
@@ -472,8 +489,8 @@ function fallbackModeAnalysis(modeKey) {
     .join("\n\n");
 }
 
-function hasMissingModes(payload = {}) {
-  return DISCUSSION_MODES.some((modeKey) => !String(payload[modeKey] || "").trim());
+function hasMissingAnalysis(payload = {}) {
+  return !String(payload.analysisMarkdown || "").trim();
 }
 
 function isIncompleteResponse(data = {}) {
@@ -531,13 +548,13 @@ async function openAIHttpError(response) {
   return error;
 }
 
-function createDiscussionCacheKey({ query, filters, articles }) {
+function createDiscussionCacheKey({ mode, query, filters, articles }) {
   const payload = {
+    mode: normalizeMode(mode),
     query: normalizePlain(query),
     filters: stableData(filters || {}),
     pmids: articles.map((article) => article.pmid).filter(Boolean).sort(),
-    articleSignature: articles.map((article) => `${article.pmid}:${article.year}:${article.evidenceRank}`).sort(),
-    dateBucket: new Date().toISOString().slice(0, 10)
+    articleSignature: articles.map((article) => `${article.pmid}:${article.year}:${article.evidenceRank}`).sort()
   };
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }
@@ -549,9 +566,9 @@ function readDiscussionCache(key) {
     discussionCache.delete(key);
     return null;
   }
-  cacheStats.callsAvoided += 3;
+  cacheStats.callsAvoided += 1;
   cacheStats.servedFromCache += 1;
-  cacheStats.estimatedUsdSaved = roundMoney(cacheStats.estimatedUsdSaved + Number(runtimeEnv.OPENAI_ESTIMATED_CALL_COST_USD || 0.01) * 3);
+  cacheStats.estimatedUsdSaved = roundMoney(cacheStats.estimatedUsdSaved + Number(runtimeEnv.OPENAI_ESTIMATED_CALL_COST_USD || 0.01));
   return entry.value;
 }
 
@@ -575,8 +592,8 @@ function cacheTtlMs() {
 
 function estimateCostSavings() {
   return {
-    baselineCallsAvoidedPerDiscussion: 3,
-    rationale: "Os quatro modos sao gerados em uma unica chamada em vez de ate quatro chamadas separadas.",
+    callsAvoidedPerCachedProfile: 1,
+    rationale: "Cada perfil e gerado em chamada propria e reaproveitado por cache quando a mesma busca e o mesmo perfil forem solicitados novamente.",
     cacheMetrics: { ...cacheStats }
   };
 }
@@ -611,7 +628,7 @@ function clampNumber(value, min, max, fallback) {
 }
 
 function normalizeMaxOutputTokens(value) {
-  return clampNumber(value, 3000, 8000, DEFAULT_MAX_OUTPUT_TOKENS);
+  return clampNumber(value, 2200, 6000, DEFAULT_MAX_OUTPUT_TOKENS);
 }
 
 function normalizePlain(value) {

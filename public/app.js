@@ -38,7 +38,7 @@ let currentView = "recommended";
 let targetResultCount = 10;
 let advancedTerms = [];
 let advancedTermId = 0;
-let discussionInFlight = false;
+let discussionInFlightMode = "";
 let activeDiscussionMode = "clinico";
 const RETURN_RESTORE_KEY = "article-search-returning";
 const SETTINGS_VERSION = 4;
@@ -308,9 +308,6 @@ discussEvidenceButton?.addEventListener("click", () => {
   discussionPanel.hidden = false;
   activeDiscussionMode = activeDiscussionMode || "clinico";
   renderDiscussionStack();
-  if (!currentResult.discussionBundle?.analyses) {
-    requestEvidenceDiscussion();
-  }
 });
 
 closeDiscussionButton?.addEventListener("click", () => {
@@ -325,8 +322,8 @@ discussionModeButtons.forEach((button) => {
   button.addEventListener("click", async () => {
     activeDiscussionMode = normalizeDiscussionMode(button.dataset.mode || "clinico");
     renderDiscussionStack();
-    if (!currentResult?.discussionBundle?.analyses) {
-      await requestEvidenceDiscussion();
+    if (!getDiscussionEntry(activeDiscussionMode)) {
+      await requestEvidenceDiscussion(activeDiscussionMode);
     }
   });
 });
@@ -445,25 +442,27 @@ async function requestSearchUntilTarget(payload, targetTotal) {
   return result;
 }
 
-async function requestEvidenceDiscussion() {
-  if (!currentResult?.articles?.length || discussionInFlight) return;
+async function requestEvidenceDiscussion(mode = activeDiscussionMode) {
+  if (!currentResult?.articles?.length || discussionInFlightMode) return;
 
   ensureDiscussionState();
+  const normalizedMode = normalizeDiscussionMode(mode);
   const articles = uniqueArticles(currentResult.articles || []).map(serializeArticleForDiscussion);
-  const signature = createDiscussionSignature(articles);
-  if (currentResult.discussionBundle?.signature === signature) {
+  const signature = createDiscussionSignature(normalizedMode, articles);
+  const existing = getDiscussionEntry(normalizedMode);
+  if (existing?.signature === signature) {
     renderDiscussionStack({
-      notice: "Esta análise já foi gerada para esta busca."
+      notice: "Esta análise já foi gerada para este perfil."
     });
     return;
   }
 
-  discussionInFlight = true;
-  setDiscussionBusy(true, "Gerando discussão aprofundada...", "A IA está criando os modos Clínico, Pesquisador, Professor e Criador de Conteúdo em uma única chamada, com foco diferente para cada perfil.");
+  discussionInFlightMode = normalizedMode;
+  setDiscussionBusy(true, "Gerando interpretação aprofundada...", `A IA está criando apenas o perfil ${discussionModeLabel(normalizedMode)}, com foco e estrutura próprios.`);
   try {
-    // Envia somente dados recuperados na busca atual; o backend aplica a selecao e as regras anti-extrapolacao.
+    // Envia somente dados recuperados na busca atual; o backend aplica a selecao, o cache por perfil e as regras anti-extrapolacao.
     const payload = {
-      mode: activeDiscussionMode,
+      mode: normalizedMode,
       query: queryToCopy(currentResult.query),
       articles,
       maxArticles: 20,
@@ -485,18 +484,21 @@ async function requestEvidenceDiscussion() {
       throw new Error(result?.error || "Não foi possível gerar a discussão das evidências.");
     }
 
-    const bundle = normalizeDiscussionBundle(result, signature);
-    currentResult.discussionBundle = bundle;
-    currentResult.discussion = discussionEntryForMode(bundle, activeDiscussionMode);
+    const entry = normalizeDiscussionEntry(result, signature, normalizedMode);
+    currentResult.discussionProfiles = {
+      ...(currentResult.discussionProfiles || {}),
+      [normalizedMode]: entry
+    };
+    currentResult.discussion = entry;
     renderDiscussionStack();
     persistLastSearch(activePayload || formSnapshotPayload(), currentResult);
   } catch (error) {
     renderDiscussionMessage(
-      "Não foi possível gerar as interpretações.",
+      "Não foi possível gerar esta interpretação.",
       `${error.message || "O motor de IA não respondeu corretamente."} A busca continua disponível; tente novamente em alguns instantes.`
     );
   } finally {
-    discussionInFlight = false;
+    discussionInFlightMode = "";
     setDiscussionBusy(false);
   }
 }
@@ -521,25 +523,36 @@ function serializeArticleForDiscussion(article = {}) {
 
 function ensureDiscussionState() {
   if (!currentResult) return;
-  if (currentResult.discussionBundle?.analyses) return;
-  if (currentResult.analyses) {
-    currentResult.discussionBundle = normalizeDiscussionBundle(currentResult, currentResult.signature || "legacy");
+  if (currentResult.discussionProfiles) return;
+  currentResult.discussionProfiles = {};
+
+  if (currentResult.discussionBundle?.analyses) {
+    const bundle = currentResult.discussionBundle;
+    for (const [mode, analysisMarkdown] of Object.entries(bundle.analyses || {})) {
+      const normalizedMode = normalizeDiscussionMode(mode);
+      if (!analysisMarkdown) continue;
+      currentResult.discussionProfiles[normalizedMode] = {
+        id: `${bundle.id || "legacy"}-${normalizedMode}`,
+        signature: bundle.signature || "legacy",
+        mode: normalizedMode,
+        generatedAt: bundle.generatedAt || new Date().toISOString(),
+        selectedCount: bundle.selectedCount || currentResult.articles?.length || 0,
+        analysisMarkdown,
+        cache: bundle.cache || null,
+        cost: bundle.cost || null
+      };
+    }
     return;
   }
   if (currentResult.discussion?.analysisMarkdown) {
     const mode = normalizeDiscussionMode(currentResult.discussion.mode || activeDiscussionMode);
-    currentResult.discussionBundle = {
+    currentResult.discussionProfiles[mode] = {
       id: "legacy",
       signature: currentResult.discussion.signature || "legacy",
+      mode,
       generatedAt: currentResult.discussion.generatedAt || new Date().toISOString(),
       selectedCount: currentResult.discussion.selectedCount || currentResult.articles?.length || 0,
-      analyses: {
-        clinico: "",
-        pesquisador: "",
-        professor: "",
-        criador_conteudo: "",
-        [mode]: currentResult.discussion.analysisMarkdown
-      },
+      analysisMarkdown: currentResult.discussion.analysisMarkdown,
       cache: currentResult.discussion.cache || null,
       cost: currentResult.discussion.cost || null
     };
@@ -557,7 +570,7 @@ function renderDiscussionMessage(title, body) {
   if (!discussionPlaceholder) return;
   discussionPlaceholder.hidden = false;
   discussionPlaceholder.innerHTML = `<strong>${escapeHtml(title)}</strong><p>${escapeHtml(body || "")}</p>`;
-  if (discussionResult && !currentResult?.discussionBundle?.analyses) {
+  if (discussionResult && !getDiscussionEntry(activeDiscussionMode)) {
     discussionResult.hidden = true;
   }
 }
@@ -565,30 +578,35 @@ function renderDiscussionMessage(title, body) {
 function renderDiscussionStack(options = {}) {
   if (!discussionResult) return;
   ensureDiscussionState();
-  const bundle = currentResult?.discussionBundle || null;
+  const entry = getDiscussionEntry(activeDiscussionMode);
   discussionModeButtons.forEach((button) => {
     button.classList.toggle("active", normalizeDiscussionMode(button.dataset.mode) === activeDiscussionMode);
   });
   discussionResult.innerHTML = "";
 
   if (options.notice) {
-    renderDiscussionMessage(options.notice, "Troque os modos pelos botões acima; nenhuma nova chamada de IA será feita.");
-  } else if (!bundle?.analyses) {
+    renderDiscussionMessage(options.notice, "O resultado foi reaproveitado do cache deste perfil; nenhuma nova chamada de IA foi feita.");
+  } else if (discussionInFlightMode === activeDiscussionMode) {
     renderDiscussionMessage(
-      "Escolha um modo de análise.",
-      "Ao iniciar, a IA gera os quatro modos em uma única chamada aprofundada e depois você alterna a visualização sem custo adicional."
+      "Gerando interpretação aprofundada...",
+      `Aguarde enquanto o perfil ${discussionModeLabel(activeDiscussionMode)} é produzido.`
+    );
+  } else if (!entry) {
+    renderDiscussionMessage(
+      "Escolha um perfil de análise.",
+      "Clique em Clínico, Pesquisador, Professor ou Criador de Conteúdo para gerar somente aquele perfil. Perfis já gerados ficam em cache por busca."
     );
   } else {
     discussionPlaceholder.hidden = true;
   }
 
-  if (!bundle?.analyses) {
+  if (!entry) {
     discussionResult.hidden = true;
     return;
   }
 
   discussionResult.hidden = false;
-  discussionResult.append(createDiscussionCard(discussionEntryForMode(bundle, activeDiscussionMode), {
+  discussionResult.append(createDiscussionCard(entry, {
     highlighted: Boolean(options.notice)
   }));
 }
@@ -624,9 +642,8 @@ function createDiscussionCard(entry, { highlighted = false } = {}) {
 
   const metaLine = document.createElement("p");
   metaLine.className = "discussion-meta";
-  const cacheText = entry.cache?.hit ? "Resposta servida do cache." : "Quatro modos gerados em uma chamada.";
-  const saved = entry.cost?.baselineCallsAvoidedPerDiscussion || 3;
-  metaLine.textContent = `${entry.selectedCount || 0} artigos analisados. ${cacheText} Economia estimada: ${saved} chamadas de IA evitadas em relação ao modelo anterior.`;
+  const cacheText = entry.cache?.hit ? "Resposta servida do cache deste perfil." : "Perfil gerado em uma chamada dedicada.";
+  metaLine.textContent = `${entry.selectedCount || 0} artigos analisados. ${cacheText} A troca de abas não empilha respostas na tela.`;
   card.append(metaLine);
 
   renderMarkdownBlock(entry.analysisMarkdown || "", card);
@@ -683,33 +700,24 @@ function discussionModeLabel(mode) {
   }[mode] || mode || "Clínico";
 }
 
-function normalizeDiscussionBundle(result = {}, signature = "") {
-  const analyses = result.analyses || {};
-  return {
-    ...result,
-    id: result.id || `bundle-${result.generatedAt || Date.now()}-${Math.random().toString(36).slice(2)}`,
-    signature,
-    generatedAt: result.generatedAt || new Date().toISOString(),
-    analyses: {
-      clinico: String(analyses.clinico || result.clinico || ""),
-      pesquisador: String(analyses.pesquisador || result.pesquisador || ""),
-      professor: String(analyses.professor || result.professor || ""),
-      criador_conteudo: String(analyses.criador_conteudo || result.criador_conteudo || "")
-    }
-  };
+function getDiscussionEntry(mode = activeDiscussionMode) {
+  if (!currentResult) return null;
+  ensureDiscussionState();
+  return currentResult.discussionProfiles?.[normalizeDiscussionMode(mode)] || null;
 }
 
-function discussionEntryForMode(bundle = {}, mode = "clinico") {
-  const normalizedMode = normalizeDiscussionMode(mode);
+function normalizeDiscussionEntry(result = {}, signature = "", mode = activeDiscussionMode) {
+  const normalizedMode = normalizeDiscussionMode(result.mode || mode);
+  const analyses = result.analyses || {};
   return {
-    id: `${bundle.id || "bundle"}-${normalizedMode}`,
-    signature: bundle.signature,
+    id: result.id || `${normalizedMode}-${result.generatedAt || Date.now()}-${Math.random().toString(36).slice(2)}`,
+    signature,
     mode: normalizedMode,
-    generatedAt: bundle.generatedAt,
-    selectedCount: bundle.selectedCount,
-    analysisMarkdown: bundle.analyses?.[normalizedMode] || "",
-    cache: bundle.cache,
-    cost: bundle.cost
+    generatedAt: result.generatedAt || new Date().toISOString(),
+    selectedCount: result.selectedCount || currentResult?.articles?.length || 0,
+    analysisMarkdown: String(result.analysisMarkdown || analyses[normalizedMode] || ""),
+    cache: result.cache || null,
+    cost: result.cost || null
   };
 }
 
@@ -726,12 +734,12 @@ function normalizeDiscussionMode(value) {
   }[String(value || "clinico")] || "clinico";
 }
 
-function createDiscussionSignature(articles = []) {
+function createDiscussionSignature(mode, articles = []) {
   const articleKey = articles
     .map((article) => String(article.pmid || article.doi || article.title || "").trim())
     .filter(Boolean)
     .join("|");
-  return `${queryToCopy(currentResult?.query || {})}::${articleKey}`;
+  return `${normalizeDiscussionMode(mode)}::${queryToCopy(currentResult?.query || {})}::${articleKey}`;
 }
 
 function formatDiscussionTimestamp(value) {
