@@ -316,8 +316,8 @@ function securityHeaders() {
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: https://www.google-analytics.com",
-      "connect-src 'self' https://eutils.ncbi.nlm.nih.gov https://id.nlm.nih.gov https://api.mymemory.translated.net https://busca-pubmed.onrender.com https://www.temevidencia.com.br https://temevidencia.com.br https://www.google-analytics.com https://region1.google-analytics.com",
+      "img-src 'self' data: https://www.google-analytics.com https://*.google-analytics.com https://stats.g.doubleclick.net",
+      "connect-src 'self' https://eutils.ncbi.nlm.nih.gov https://id.nlm.nih.gov https://api.mymemory.translated.net https://busca-pubmed.onrender.com https://www.temevidencia.com.br https://temevidencia.com.br https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://analytics.google.com https://*.analytics.google.com https://stats.g.doubleclick.net",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'"

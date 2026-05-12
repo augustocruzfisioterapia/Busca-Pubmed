@@ -45,9 +45,11 @@ const SETTINGS_VERSION = 4;
 const configuredApiBase = normalizeApiBase(window.BUSCA_PUBMED_API_BASE || "");
 const gaMeasurementId = normalizeAnalyticsId(window.BUSCA_PUBMED_GA_MEASUREMENT_ID || "");
 const internalAnalyticsEnabled = window.BUSCA_PUBMED_INTERNAL_ANALYTICS !== false;
+const analyticsDebugMode = isAnalyticsDebugMode();
 
 initializeAnalytics();
 trackPageView();
+trackAnalyticsDebugEvent();
 installPageViewTracking();
 
 const CLIENT_DESCRIPTORS = [
@@ -2032,7 +2034,9 @@ function initializeAnalytics() {
   window.gtag("js", new Date());
   window.gtag("config", gaMeasurementId, {
     anonymize_ip: true,
-    send_page_view: false
+    send_page_view: false,
+    transport_type: "beacon",
+    debug_mode: analyticsDebugMode
   });
 
   const script = document.createElement("script");
@@ -2058,13 +2062,25 @@ function trackPageView() {
   });
 }
 
+function trackAnalyticsDebugEvent() {
+  if (!analyticsDebugMode) return;
+  trackEvent("teste_tem_evidencia", {
+    origem: isProductionHost() ? "site_producao" : "ambiente_local"
+  });
+}
+
 function trackEvent(name, params = {}) {
   const eventName = normalizeAnalyticsName(name);
   if (!eventName) return;
   const safeParams = sanitizeAnalyticsParams(params);
 
   if (gaMeasurementId && typeof window.gtag === "function") {
-    window.gtag("event", eventName, safeParams);
+    window.gtag("event", eventName, {
+      send_to: gaMeasurementId,
+      transport_type: "beacon",
+      debug_mode: analyticsDebugMode,
+      ...safeParams
+    });
   }
   recordInternalAnalyticsEvent(eventName, safeParams);
 }
@@ -2116,6 +2132,18 @@ function sanitizeAnalyticsParams(params = {}) {
 function normalizeAnalyticsId(value) {
   const normalized = String(value || "").trim();
   return /^G-[A-Z0-9]+$/i.test(normalized) ? normalized : "";
+}
+
+function isAnalyticsDebugMode() {
+  const params = new URLSearchParams(window.location.search || "");
+  return params.get("ga_debug") === "1"
+    || params.get("debug_mode") === "1"
+    || params.has("gtm_debug")
+    || localStorage.getItem("tem-evidencia-ga-debug") === "1";
+}
+
+function isProductionHost() {
+  return ["www.temevidencia.com.br", "temevidencia.com.br"].includes(window.location.hostname);
 }
 
 function normalizeAnalyticsName(value) {
