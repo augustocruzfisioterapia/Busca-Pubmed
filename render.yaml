@@ -36,7 +36,7 @@ services:
       - key: RATE_LIMIT_AI_MAX
         value: 6
       - key: ALLOWED_ORIGIN
-        value: https://augustocruzfisioterapia.github.io
+        value: https://www.temevidencia.com.br,https://temevidencia.com.br,https://busca-pubmed.onrender.com,https://augustocruzfisioterapia.github.io
       - key: NCBI_EMAIL
         sync: false
       - key: NCBI_API_KEY

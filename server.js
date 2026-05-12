@@ -17,6 +17,18 @@ const aiRateLimitMax = Number(process.env.RATE_LIMIT_AI_MAX || 6);
 const searchRateLimitMax = Number(process.env.RATE_LIMIT_SEARCH_MAX || rateLimitMax);
 const maxBodySize = Number(process.env.MAX_BODY_SIZE || 1_000_000);
 const rateLimitBuckets = new Map();
+const defaultAllowedOrigins = [
+  "https://www.temevidencia.com.br",
+  "https://temevidencia.com.br",
+  "https://busca-pubmed.onrender.com",
+  "https://augustocruzfisioterapia.github.io",
+  "http://localhost:3000",
+  "http://localhost:4173",
+  "http://localhost:5173",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:4173",
+  "http://127.0.0.1:5173"
+];
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -32,22 +44,26 @@ const contentTypes = {
 const server = http.createServer(async (req, res) => {
   try {
     if (req.method === "OPTIONS") {
-      return sendOptions(res);
+      return sendOptions(req, res);
     }
 
-    if (req.url === "/api/health") {
-      return sendJson(res, 200, {
+    const routePath = requestPath(req);
+
+    if (routePath === "/api/health") {
+      return sendJson(req, res, 200, {
+        status: "ok",
         ok: true,
-        service: "tem-evidencia",
+        service: "Tem Evidência?",
+        timestamp: new Date().toISOString(),
         version: process.env.npm_package_version || "0.1.0"
       });
     }
 
-    if (req.url?.startsWith("/api/") && !checkRateLimit(req, res)) {
+    if (routePath.startsWith("/api/") && !checkRateLimit(req, res)) {
       return undefined;
     }
 
-    if (req.url === "/api/search" && req.method === "POST") {
+    if (routePath === "/api/search" && req.method === "POST") {
       const body = await readJsonBody(req);
       const result = await runArticleSearch(body);
       console.info("[usage-search]", {
@@ -56,29 +72,33 @@ const server = http.createServer(async (req, res) => {
         maxResults: body.maxResults,
         freePdfOnly: Boolean(body.freePdfOnly)
       });
-      return sendJson(res, result.searchUnavailable ? 503 : 200, result);
+      return sendJson(req, res, result.searchUnavailable ? 503 : 200, result);
     }
 
-    if (req.url === "/api/resolve-terms" && req.method === "POST") {
+    if (routePath === "/api/resolve-terms" && req.method === "POST") {
       const body = await readJsonBody(req);
       const result = await resolveSearchConceptsOnline(body.searchText || "");
-      return sendJson(res, 200, { ok: true, ...result });
+      return sendJson(req, res, 200, { ok: true, ...result });
     }
 
-    if (req.url === "/api/discuss-evidence" && req.method === "POST") {
+    if (isEvidenceDiscussionRoute(routePath) && req.method === "POST") {
       const body = await readJsonBody(req);
       const result = await runEvidenceDiscussion(body);
       console.info("[usage-ai]", {
         ip: clientIp(req),
         selectedCount: result.selectedCount,
         cacheHit: Boolean(result.cache?.hit),
-        callsAvoided: result.cost?.baselineCallsAvoidedPerDiscussion || 0
+        callsAvoided: result.cost?.callsAvoidedPerCachedProfile || 0
       });
-      return sendJson(res, 200, result);
+      return sendJson(req, res, 200, result);
     }
 
-    if (req.url?.startsWith("/api/")) {
-      return sendJson(res, 404, { ok: false, error: "Endpoint nao encontrado." });
+    if (routePath.startsWith("/api/")) {
+      return sendJson(req, res, 404, {
+        ok: false,
+        error: "Endpoint nao encontrado.",
+        endpoints: ["/api/health", "/api/search", "/api/resolve-terms", "/api/discuss-evidence"]
+      });
     }
 
     return serveStatic(req, res);
@@ -90,7 +110,7 @@ const server = http.createServer(async (req, res) => {
       status,
       message: error.message
     });
-    return sendJson(res, status, {
+    return sendJson(req, res, status, {
       ok: false,
       error: error.publicMessage || "Falha ao processar a solicitacao.",
       detail: process.env.NODE_ENV === "production" ? undefined : error.message
@@ -126,32 +146,61 @@ async function serveStatic(req, res) {
   }
 }
 
-function sendJson(res, status, payload) {
+function requestPath(req) {
+  return new URL(req.url || "/", `http://${req.headers.host || "localhost"}`).pathname;
+}
+
+function isEvidenceDiscussionRoute(routePath) {
+  return ["/api/discuss-evidence", "/api/ai-discussion", "/api/analyze"].includes(routePath);
+}
+
+function sendJson(req, res, status, payload) {
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
     ...securityHeaders(),
-    ...corsHeaders()
+    ...corsHeaders(req)
   });
   res.end(JSON.stringify(payload, null, 2));
 }
 
-function sendText(res, status, text) {
-  res.writeHead(status, { "Content-Type": "text/plain; charset=utf-8", ...securityHeaders(), ...corsHeaders() });
+function sendText(res, status, text, req = undefined) {
+  res.writeHead(status, { "Content-Type": "text/plain; charset=utf-8", ...securityHeaders(), ...corsHeaders(req) });
   res.end(text);
 }
 
-function sendOptions(res) {
-  res.writeHead(204, { ...securityHeaders(), ...corsHeaders() });
+function sendOptions(req, res) {
+  res.writeHead(204, { ...securityHeaders(), ...corsHeaders(req) });
   res.end();
 }
 
-function corsHeaders() {
-  return {
-    "Access-Control-Allow-Origin": process.env.ALLOWED_ORIGIN || "*",
+function corsHeaders(req) {
+  const origin = req?.headers?.origin;
+  const headers = {
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type,Accept"
+    "Access-Control-Allow-Headers": "Content-Type,Accept,Authorization",
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin"
   };
+
+  if (origin && allowedOrigins().has(origin.replace(/\/+$/, ""))) {
+    headers["Access-Control-Allow-Origin"] = origin;
+  }
+  return headers;
+}
+
+function allowedOrigins() {
+  const configured = [
+    process.env.ALLOWED_ORIGIN,
+    process.env.ALLOWED_ORIGINS,
+    process.env.CORS_ORIGINS
+  ]
+    .filter(Boolean)
+    .flatMap((value) => String(value).split(/[\s,]+/))
+    .map((value) => value.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
+
+  return new Set([...defaultAllowedOrigins, ...configured]);
 }
 
 function securityHeaders() {
@@ -161,7 +210,7 @@ function securityHeaders() {
       "script-src 'self'",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data:",
-      "connect-src 'self' https://eutils.ncbi.nlm.nih.gov https://id.nlm.nih.gov https://api.mymemory.translated.net https://busca-pubmed.onrender.com",
+      "connect-src 'self' https://eutils.ncbi.nlm.nih.gov https://id.nlm.nih.gov https://api.mymemory.translated.net https://busca-pubmed.onrender.com https://www.temevidencia.com.br https://temevidencia.com.br",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'"
@@ -233,7 +282,7 @@ function checkRateLimit(req, res) {
     "Cache-Control": "no-store",
     "Retry-After": String(retryAfterSeconds),
     ...securityHeaders(),
-    ...corsHeaders()
+    ...corsHeaders(req)
   });
   res.end(JSON.stringify({
     ok: false,
@@ -244,8 +293,8 @@ function checkRateLimit(req, res) {
 }
 
 function rateLimitPolicy(req) {
-  const url = req.url || "";
-  if (url.startsWith("/api/discuss-evidence")) {
+  const url = requestPath(req);
+  if (isEvidenceDiscussionRoute(url)) {
     return { name: "ai", windowMs: aiRateLimitWindowMs, max: aiRateLimitMax };
   }
   if (url.startsWith("/api/search")) {

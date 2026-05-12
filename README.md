@@ -81,6 +81,20 @@ OPENAI_API_KEY=sua-chave-openai
 
 O plano gratuito serve para teste publico inicial, mas pode entrar em modo de espera quando fica sem acesso. Para uma ferramenta publica com uso real, use um plano sempre ativo.
 
+Com dominio customizado no Render, mantenha a API no mesmo dominio sempre que possivel. O frontend usa chamadas relativas por padrao em `https://www.temevidencia.com.br` e em `https://busca-pubmed.onrender.com`; `public/config.js` so usa a URL do Render como fallback para GitHub Pages ou arquivo local.
+
+O backend aceita CORS por allowlist para:
+
+```text
+https://www.temevidencia.com.br
+https://temevidencia.com.br
+https://busca-pubmed.onrender.com
+https://augustocruzfisioterapia.github.io
+http://localhost:3000
+http://localhost:4173
+http://localhost:5173
+```
+
 ## Publicacao no GitHub Pages
 
 O GitHub Pages hospeda apenas a interface. A busca cientifica continua usando a API Node publicada no Render.
@@ -94,10 +108,10 @@ Fluxo recomendado:
 https://busca-pubmed.onrender.com
 ```
 
-3. Se a URL do Render for diferente, edite `public/config.js`:
+3. Se a URL do Render for diferente, edite o fallback em `public/config.js`:
 
 ```js
-window.BUSCA_PUBMED_API_BASE = "https://sua-url-do-render.onrender.com";
+const TEM_EVIDENCIA_API_FALLBACK = "https://sua-url-do-render.onrender.com";
 ```
 
 4. No GitHub, acesse `Settings` > `Pages`.
@@ -132,7 +146,7 @@ RATE_LIMIT_SEARCH_MAX=20
 RATE_LIMIT_AI_WINDOW_MS=600000
 RATE_LIMIT_AI_MAX=6
 MAX_BODY_SIZE=1000000
-ALLOWED_ORIGIN=
+ALLOWED_ORIGIN=https://www.temevidencia.com.br,https://temevidencia.com.br,https://busca-pubmed.onrender.com,http://localhost:3000,http://localhost:4173,http://localhost:5173
 ```
 
 ## Regras de links
