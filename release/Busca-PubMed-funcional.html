@@ -1449,10 +1449,8 @@ const gaMeasurementId = normalizeAnalyticsId(window.BUSCA_PUBMED_GA_MEASUREMENT_
 const internalAnalyticsEnabled = window.BUSCA_PUBMED_INTERNAL_ANALYTICS !== false;
 
 initializeAnalytics();
-trackEvent("page_view", {
-  page_path: window.location.pathname || "/",
-  page_title: document.title
-});
+trackPageView();
+installPageViewTracking();
 
 const CLIENT_DESCRIPTORS = [
   {
@@ -3445,6 +3443,23 @@ function initializeAnalytics() {
   document.head.append(script);
 }
 
+function installPageViewTracking() {
+  if (installPageViewTracking.installed) return;
+  installPageViewTracking.installed = true;
+  window.addEventListener("popstate", () => {
+    trackPageView();
+  });
+}
+
+function trackPageView() {
+  trackEvent("page_view", {
+    page_path: `${window.location.pathname || "/"}${window.location.search || ""}`,
+    page_title: document.title,
+    page_location: safeAnalyticsUrl(window.location.href),
+    page_hostname: window.location.hostname
+  });
+}
+
 function trackEvent(name, params = {}) {
   const eventName = normalizeAnalyticsName(name);
   if (!eventName) return;
@@ -3515,7 +3530,22 @@ function normalizeAnalyticsName(value) {
     .slice(0, 80);
 }
 
+function safeAnalyticsUrl(value) {
+  try {
+    const url = new URL(value);
+    for (const key of [...url.searchParams.keys()]) {
+      if (/token|key|secret|email/i.test(key)) {
+        url.searchParams.set(key, "redacted");
+      }
+    }
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
 function isSensitiveAnalyticsKey(key) {
+  if (key === "page_title") return false;
   return /search|query|term|title|abstract|doi|pmid|email|token|key|secret|patient|nome/.test(key);
 }
 

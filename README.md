@@ -73,7 +73,7 @@ NCBI_EMAIL=seu-email-de-contato
 NCBI_API_KEY=sua-chave-ncbi
 UNPAYWALL_EMAIL=seu-email-de-contato
 OPENAI_API_KEY=sua-chave-openai
-GA_MEASUREMENT_ID=G-XXXXXXXXXX
+GA_MEASUREMENT_ID=G-N0QQY69DTE
 ADMIN_METRICS_TOKEN=crie-um-token-longo
 ```
 
@@ -151,7 +151,7 @@ RATE_LIMIT_AI_WINDOW_MS=600000
 RATE_LIMIT_AI_MAX=6
 MAX_BODY_SIZE=1000000
 ALLOWED_ORIGIN=https://www.temevidencia.com.br,https://temevidencia.com.br,https://busca-pubmed.onrender.com,http://localhost:3000,http://localhost:4173,http://localhost:5173
-GA_MEASUREMENT_ID=
+GA_MEASUREMENT_ID=G-N0QQY69DTE
 ADMIN_METRICS_TOKEN=
 ```
 
