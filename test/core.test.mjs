@@ -528,6 +528,9 @@ test("buildEvidenceDiscussionPrompt inclui regras cientificas obrigatorias", () 
   assert.match(prompt, /## 1\./);
   assert.match(prompt, /## 4\./);
   assert.match(prompt, /Base obrigatoria para todos os modos/);
+  assert.match(prompt, /Profundidade e utilidade esperadas/);
+  assert.match(prompt, /cada modo deve ter 450 a 700 palavras/);
+  assert.match(prompt, /Nao entregue respostas superficiais/);
   assert.match(prompt, /Direcao dos achados: beneficio, neutro ou dano/);
   assert.match(prompt, /N\/tamanho amostral quando disponivel/);
   assert.match(prompt, /Relevancia estatistica/);
@@ -537,6 +540,7 @@ test("buildEvidenceDiscussionPrompt inclui regras cientificas obrigatorias", () 
   assert.match(prompt, /MODO CLINICO \(DECISAO\)/);
   assert.match(prompt, /profissional decidindo na UTI agora/);
   assert.match(prompt, /Deve ser considerado, Indicado quando, Evitar em pacientes com, Nao recomendado quando/);
+  assert.match(prompt, /Aprofunde implicacoes clinicas, seguranca do paciente/);
   assert.match(prompt, /## 1\. O que isso muda na pratica/);
   assert.match(prompt, /## 2\. Quando aplicar/);
   assert.match(prompt, /## 3\. Quando evitar/);
@@ -570,6 +574,7 @@ test("buildEvidenceDiscussionPrompt inclui estruturas exclusivas dos quatro modo
 
   assert.match(prompt, /MODO PESQUISADOR \(CRITICO\)/);
   assert.match(prompt, /O principal vies aqui e, A evidencia e limitada porque, A confianca nesses resultados e/);
+  assert.match(prompt, /Aprofunde desenho, vies, estatistica, validade externa/);
   assert.match(prompt, /## 1\. Qualidade da evidencia/);
   assert.match(prompt, /## 4\. Grau de confiabilidade/);
   assert.match(prompt, /MODO PROFESSOR \(ENSINO\)/);
@@ -617,7 +622,7 @@ test("runEvidenceDiscussion chama Responses API com artigos retornados pela busc
 
   assert.equal(capturedUrl, "https://api.openai.com/v1/responses");
   assert.equal(capturedBody.model, "test-model");
-  assert.equal(capturedBody.max_output_tokens, 3600);
+  assert.equal(capturedBody.max_output_tokens, 6200);
   assert.equal(capturedBody.text.format.type, "json_schema");
   assert.match(capturedBody.instructions, /Use exclusivamente os artigos fornecidos/);
   assert.match(capturedBody.input, /PMID: 99/);
@@ -650,7 +655,7 @@ test("runEvidenceDiscussion refaz chamada compacta quando resposta vem incomplet
       calls += 1;
       const body = JSON.parse(options.body);
       if (calls === 1) {
-        assert.equal(body.max_output_tokens, 3600);
+        assert.equal(body.max_output_tokens, 6200);
         return jsonResponse({
           status: "incomplete",
           incomplete_details: { reason: "max_output_tokens" },

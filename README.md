@@ -1,8 +1,8 @@
-# Tem Evidencia?
+# Tem Evidência?
 
 Protegendo pacientes do "eu acho".
 
-Aplicacao web/local para buscar artigos cientificos na PubMed com apoio a termos em portugues, MeSH Terms, auditoria de links e interpretacao por IA orientada a pratica baseada em evidencia.
+Aplicação web/local para buscar artigos científicos na PubMed com apoio a termos em português, MeSH Terms, auditoria de links e interpretação por IA orientada à prática baseada em evidência.
 
 ## Como rodar
 
@@ -123,7 +123,7 @@ UNPAYWALL_EMAIL=
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4.1-mini
 OPENAI_TIMEOUT_MS=45000
-OPENAI_MAX_OUTPUT_TOKENS=3600
+OPENAI_MAX_OUTPUT_TOKENS=6200
 OPENAI_ESTIMATED_CALL_COST_USD=0.01
 AI_CACHE_TTL_MS=604800000
 RATE_LIMIT_WINDOW_MS=60000

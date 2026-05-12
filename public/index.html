@@ -3,11 +3,18 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#13332d">
-    <meta name="description" content="Tem Evidência? aproxima a prática clínica da PubMed para proteger pacientes do achismo com busca científica, leitura crítica e interpretação por IA.">
-    <title>Tem Evidência? | Protegendo pacientes do eu acho</title>
+    <meta name="theme-color" content="#10231f">
+    <meta name="description" content="Tem Evidência? transforma busca avançada na PubMed e interpretação científica por IA em decisões clínicas melhor fundamentadas. Protegendo pacientes do eu acho.">
+    <meta property="og:title" content="Tem Evidência?">
+    <meta property="og:description" content="Protegendo pacientes do eu acho com busca avançada na PubMed e interpretação científica por IA.">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Tem Evidência?">
+    <meta name="twitter:description" content="Protegendo pacientes do eu acho com evidência científica aplicada à prática clínica.">
+    <title>Tem Evidência? | Protegendo pacientes do “eu acho”</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="stylesheet" href="styles.css?v=20260429-1">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css?v=20260512-1">
   </head>
   <body>
     <div class="app-shell">
@@ -15,10 +22,13 @@
         <nav class="nav-bar" aria-label="Principal">
           <div class="brand">
             <div class="brand-mark" aria-hidden="true">
-              <svg viewBox="0 0 42 42" role="img" focusable="false">
-                <circle cx="21" cy="21" r="18" class="logo-ring"></circle>
-                <path class="logo-leaf" d="M22.5 27.8c6.1-.7 10.2-5.2 10.6-11.6-6.6-.1-11.1 3.7-12.2 9.8 2.5-2.8 5.3-4.8 8.6-6.1-3.2 2.1-5.8 4.8-7 7.9Z"></path>
-                <path class="logo-pulse" d="M8.8 23.1h6.1l2.4-5.9 4.2 12.1 2.2-6.2h9.5"></path>
+              <svg viewBox="0 0 48 48" role="img" focusable="false">
+                <rect x="4" y="4" width="40" height="40" rx="11" class="logo-plate"></rect>
+                <path class="logo-paper" d="M15 14.5h13.2l4.8 4.8v14.2H15z"></path>
+                <path class="logo-fold" d="M28.2 14.5v5h4.8"></path>
+                <path class="logo-signal" d="M18 30l4.6-5.2 4.2 3.2 5.2-8"></path>
+                <circle cx="32" cy="20" r="2" class="logo-dot"></circle>
+                <text x="23.5" y="30.5" class="logo-question">?</text>
               </svg>
             </div>
             <div>
@@ -33,8 +43,9 @@
 
         <section class="search-card" aria-label="Busca de artigos">
           <div class="search-copy">
-            <h1>Tem Evidência?</h1>
-            <p>Busca avançada na PubMed para transformar ciência em decisão clínica melhor fundamentada.</p>
+            <span class="hero-eyebrow">Busca avançada na PubMed</span>
+            <h1>Protegendo pacientes do “eu acho”.</h1>
+            <p>Transformando evidência científica em decisões clínicas melhor fundamentadas.</p>
           </div>
 
           <form id="search-form" class="search-form">
@@ -156,7 +167,7 @@
           <div class="result-actions">
             <button id="copy-query" class="secondary-button compact-button" type="button">Copiar query</button>
             <button id="copy-doi-list" class="secondary-button compact-button" type="button">Copiar lista de DOI</button>
-            <button id="discuss-evidence" class="secondary-button discuss-button" type="button">Interpretar com IA</button>
+            <button id="discuss-evidence" class="secondary-button discuss-button" type="button">Discutir evidências</button>
           </div>
         </section>
         <p class="ranking-note" id="ranking-note" hidden>O ranking é uma organização auxiliar baseada nos metadados disponíveis no PubMed e não substitui avaliação crítica metodológica completa.</p>
@@ -188,12 +199,12 @@
           <button id="close-discussion" type="button">Fechar</button>
         </div>
         <div class="discussion-body">
-          <p>A IA gera quatro leituras em uma única chamada: decisão clínica, crítica científica, ensino e comunicação. A análise usa apenas os artigos retornados pela busca.</p>
+          <p>O Tem Evidência? gera quatro leituras em uma única chamada: decisão clínica, crítica científica, ensino e comunicação. A análise usa apenas os artigos retornados pela busca.</p>
           <div class="discussion-modes" role="group" aria-label="Modo de análise">
-            <button type="button" data-mode="clinico">Clínico</button>
-            <button type="button" data-mode="pesquisador">Pesquisador</button>
-            <button type="button" data-mode="professor">Professor</button>
-            <button type="button" data-mode="criador_conteudo">Criador de Conteúdo</button>
+            <button type="button" data-mode="clinico" title="Foco em decisão prática e segurança do paciente">Clínico</button>
+            <button type="button" data-mode="pesquisador" title="Foco em validade científica, vieses e metodologia">Pesquisador</button>
+            <button type="button" data-mode="professor" title="Foco em explicação progressiva e ensino">Professor</button>
+            <button type="button" data-mode="criador_conteudo" title="Foco em comunicação, hooks e cautelas">Criador de Conteúdo</button>
           </div>
           <div id="discussion-placeholder" class="discussion-placeholder" hidden></div>
           <div id="discussion-result" class="discussion-result" hidden></div>
@@ -236,7 +247,7 @@
           .catch(() => {});
       }
     </script>
-    <script src="config.js?v=20260429-1"></script>
-    <script src="app.js?v=20260429-1" type="module"></script>
+    <script src="config.js?v=20260512-1"></script>
+    <script src="app.js?v=20260512-1" type="module"></script>
   </body>
 </html>

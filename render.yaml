@@ -24,7 +24,7 @@ services:
       - key: OPENAI_TIMEOUT_MS
         value: 45000
       - key: OPENAI_MAX_OUTPUT_TOKENS
-        value: 3600
+        value: 6200
       - key: OPENAI_ESTIMATED_CALL_COST_USD
         value: 0.01
       - key: AI_CACHE_TTL_MS

@@ -459,7 +459,7 @@ async function requestEvidenceDiscussion() {
   }
 
   discussionInFlight = true;
-  setDiscussionBusy(true, "Gerando quatro interpretações...", "A IA está criando os modos Clínico, Pesquisador, Professor e Criador de Conteúdo em uma única chamada.");
+  setDiscussionBusy(true, "Gerando discussão aprofundada...", "A IA está criando os modos Clínico, Pesquisador, Professor e Criador de Conteúdo em uma única chamada, com foco diferente para cada perfil.");
   try {
     // Envia somente dados recuperados na busca atual; o backend aplica a selecao e as regras anti-extrapolacao.
     const payload = {
@@ -576,7 +576,7 @@ function renderDiscussionStack(options = {}) {
   } else if (!bundle?.analyses) {
     renderDiscussionMessage(
       "Escolha um modo de análise.",
-      "Ao iniciar, a IA gera os quatro modos em uma única chamada e depois você alterna a visualização sem custo adicional."
+      "Ao iniciar, a IA gera os quatro modos em uma única chamada aprofundada e depois você alterna a visualização sem custo adicional."
     );
   } else {
     discussionPlaceholder.hidden = true;

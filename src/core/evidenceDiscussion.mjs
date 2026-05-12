@@ -5,7 +5,7 @@ const runtimeEnv = typeof process !== "undefined" ? process.env : {};
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const DISCUSSION_MODES = ["clinico", "pesquisador", "professor", "criador_conteudo"];
 const VALID_INPUT_MODES = new Set(["Clinico", "Pesquisador", "Professor", "Conteudo", ...DISCUSSION_MODES]);
-const DEFAULT_MAX_OUTPUT_TOKENS = 3600;
+const DEFAULT_MAX_OUTPUT_TOKENS = 6200;
 const DEFAULT_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const discussionCache = new Map();
 const cacheStats = {
@@ -22,13 +22,14 @@ const MODE_RESPONSE_STRUCTURES = {
       "Assuma o papel de um profissional decidindo na UTI agora.",
       "Tome posicao clara, mantendo a cautela dos dados fornecidos.",
       "Use obrigatoriamente frases como: Deve ser considerado, Indicado quando, Evitar em pacientes com, Nao recomendado quando.",
+      "Aprofunde implicacoes clinicas, seguranca do paciente, impacto em desfechos e limites praticos.",
       "Nao discuta metodologia de forma extensa, nao use linguagem neutra e nao faca analise academica generica."
     ],
     sections: [
-      ["## 1. O que isso muda na pratica", "Diga a implicacao clinica direta, direcao dos achados, N quando disponivel e relevancia para decisao."],
-      ["## 2. Quando aplicar", "Use linguagem de decisao: Deve ser considerado/Indicado quando, sempre com base nos artigos fornecidos."],
-      ["## 3. Quando evitar", "Use linguagem de decisao: Evitar em pacientes com/Nao recomendado quando, sem extrapolar alem dos dados."],
-      ["## 4. Riscos importantes", "Liste riscos clinicos, cenarios de incerteza e limites de seguranca."]
+      ["## 1. O que isso muda na pratica", "Explique a implicacao clinica direta, direcao dos achados, N quando disponivel, desfechos afetados e grau de seguranca para decisao."],
+      ["## 2. Quando aplicar", "Use linguagem de decisao: Deve ser considerado/Indicado quando, conectando perfil do paciente, contexto assistencial e achados dos artigos fornecidos."],
+      ["## 3. Quando evitar", "Use linguagem de decisao: Evitar em pacientes com/Nao recomendado quando, destacando cenarios de risco, populacoes nao representadas e incertezas."],
+      ["## 4. Riscos importantes", "Liste riscos clinicos, danos possiveis, armadilhas de interpretacao e limites de seguranca."]
     ]
   },
   pesquisador: {
@@ -38,13 +39,14 @@ const MODE_RESPONSE_STRUCTURES = {
       "Assuma o papel de avaliador critico da validade cientifica.",
       "Questione a confiabilidade da evidencia antes de qualquer aplicacao.",
       "Inclua obrigatoriamente frases como: O principal vies aqui e, A evidencia e limitada porque, A confianca nesses resultados e.",
+      "Aprofunde desenho, vies, estatistica, validade externa, desfechos clinicos/substitutos e forca da evidencia.",
       "Nao sugira aplicacao clinica e nao faca recomendacoes praticas."
     ],
     sections: [
-      ["## 1. Qualidade da evidencia", "Avalie desenho, hierarquia, N, poder amostral e relevancia estatistica quando informada."],
-      ["## 2. Principais vieses", "Aponte vieses plausiveis a partir dos abstracts e metadados."],
-      ["## 3. Limitacoes metodologicas", "Discuta heterogeneidade, desfechos clinicos/substitutos, lacunas e ausencia de dados."],
-      ["## 4. Grau de confiabilidade", "Classifique a confiabilidade de modo cauteloso, sem recomendacao clinica."]
+      ["## 1. Qualidade da evidencia", "Avalie desenho, hierarquia, N, poder amostral, relevancia estatistica quando informada e coerencia entre os estudos fornecidos."],
+      ["## 2. Principais vieses", "Aponte vieses plausiveis a partir dos abstracts e metadados, separando limitacoes de selecao, mensuracao, confundimento e publicacao quando aplicavel."],
+      ["## 3. Limitacoes metodologicas", "Discuta heterogeneidade, desfechos clinicos/substitutos, lacunas, ausencia de dados e limites de validade externa."],
+      ["## 4. Grau de confiabilidade", "Classifique a confiabilidade de modo cauteloso, explicando por que a evidencia parece forte, moderada, baixa ou insuficiente, sem recomendacao clinica."]
     ]
   },
   professor: {
@@ -54,13 +56,14 @@ const MODE_RESPONSE_STRUCTURES = {
       "Assuma o papel de professor ensinando o raciocinio passo a passo.",
       "Explique conceitos de modo progressivo, com linguagem clara.",
       "Traduza termos complexos sem perder rigor.",
+      "Use uma analogia simples quando ajudar a explicar a diferenca entre evidencia, associacao, causalidade e aplicabilidade.",
       "Nao use linguagem excessivamente tecnica e nao tome decisao clinica direta."
     ],
     sections: [
-      ["## 1. Explicacao do fenomeno", "Explique o problema e o racional dos estudos de forma progressiva."],
-      ["## 2. Como interpretar os resultados", "Ensine como olhar direcao dos achados, N, tipo de estudo e relevancia estatistica quando informada."],
-      ["## 3. O que isso significa na pratica", "Traduza o significado pratico sem emitir recomendacao direta."],
-      ["## 4. Onde os alunos costumam errar", "Mostre erros comuns, como confundir associacao, significancia, causalidade e desfecho substituto."]
+      ["## 1. Explicacao do fenomeno", "Explique o problema, o racional dos estudos e a pergunta clinica de forma progressiva, como em uma aula curta."],
+      ["## 2. Como interpretar os resultados", "Ensine como olhar direcao dos achados, N, tipo de estudo, relevancia estatistica quando informada e diferenca entre desfecho clinico e substituto."],
+      ["## 3. O que isso significa na pratica", "Traduza o significado pratico sem emitir recomendacao direta, conectando ciencia, raciocinio clinico e limites da aplicabilidade."],
+      ["## 4. Onde os alunos costumam errar", "Mostre erros comuns, como confundir associacao, significancia, causalidade, ausencia de efeito e desfecho substituto."]
     ]
   },
   criador_conteudo: {
@@ -69,17 +72,26 @@ const MODE_RESPONSE_STRUCTURES = {
     role: [
       "Assuma o papel de comunicador cientifico.",
       "Transforme os achados em mensagem, com frases curtas e insights claros.",
+      "Crie ideias de conteudo, hooks, temas debatíveis e cautelas para nao distorcer a ciencia.",
       "Evite estrutura academica repetida, analise profunda e jargoes desnecessarios.",
       "Nao simplifique a ponto de distorcer os dados."
     ],
     sections: [
-      ["## 1. Mensagem principal", "Entregue uma mensagem curta, forte e fiel aos dados."],
-      ["## 2. 3 insights principais", "Liste exatamente 3 insights em bullets, incluindo direcao dos achados, N quando disponivel e limites."],
-      ["## 3. Frases utilizaveis", "Crie frases curtas para post, aula, legenda ou chamada profissional."],
-      ["## 4. Como comunicar isso para leigos/profissionais", "Diferencie a comunicacao para publico leigo e para profissionais."]
+      ["## 1. Mensagem principal", "Entregue uma mensagem curta, forte, memoravel e fiel aos dados, sem promessa absoluta."],
+      ["## 2. 3 insights principais", "Liste exatamente 3 insights em bullets, incluindo direcao dos achados, N quando disponivel, ponto forte e limite de interpretacao."],
+      ["## 3. Frases utilizaveis", "Crie hooks, legendas, chamadas e frases de aula/conteudo que preservem rigor cientifico."],
+      ["## 4. Como comunicar isso para leigos/profissionais", "Diferencie comunicacao para publico leigo e para profissionais, incluindo cautelas para nao transformar evidencia limitada em certeza."]
     ]
   }
 };
+
+const DEPTH_REQUIREMENTS = [
+  "Mantenha uma unica chamada e gere os quatro modos completos no mesmo JSON.",
+  "Nao entregue respostas superficiais: cada modo deve ter profundidade propria e utilidade concreta para seu perfil.",
+  "Cada secao deve ter conteudo suficiente para orientar uso real: em geral 2 a 4 frases ou bullets densos por secao.",
+  "Evite copiar a mesma conclusao nos quatro modos; mude o raciocinio, a prioridade e a forma de apresentar a evidencia.",
+  "Quando os artigos nao trouxerem detalhes suficientes, aprofunde a limitacao e explique o que falta, sem inventar."
+];
 
 const SHARED_MODE_REQUIREMENTS = [
   "Principais resultados dos estudos.",
@@ -229,8 +241,8 @@ export function prepareEvidenceDiscussionArticles(articles = [], options = {}) {
 export function buildEvidenceDiscussionPrompt({ query, articles, compact = false }) {
   const articleBlocks = articles.map(formatArticleForPrompt).join("\n\n");
   const sizeInstruction = compact
-    ? "MODO COMPACTO: responda com cada modo em no maximo 220 palavras, mantendo sua estrutura exclusiva."
-    : "Responda de forma objetiva, sem redundancias e sem padrao academico repetido.";
+    ? "MODO COMPACTO: responda com cada modo em 250 a 350 palavras, mantendo a estrutura exclusiva e completando todas as secoes."
+    : "Responda com profundidade moderada: cada modo deve ter 450 a 700 palavras quando houver dados suficientes, sem redundancia e sem padrao academico repetido.";
 
   return [
     "Tarefa: gerar quatro interpretacoes diferentes dos mesmos artigos retornados pela plataforma Tem Evidencia?.",
@@ -244,6 +256,9 @@ export function buildEvidenceDiscussionPrompt({ query, articles, compact = false
     "",
     "Base obrigatoria para todos os modos:",
     ...SHARED_MODE_REQUIREMENTS.map((rule) => `- ${rule}`),
+    "",
+    "Profundidade e utilidade esperadas:",
+    ...DEPTH_REQUIREMENTS.map((rule) => `- ${rule}`),
     "",
     "Regras cientificas e de seguranca:",
     ...SCIENTIFIC_GUARDRAILS.map((rule) => `- ${rule}`),
@@ -596,7 +611,7 @@ function clampNumber(value, min, max, fallback) {
 }
 
 function normalizeMaxOutputTokens(value) {
-  return clampNumber(value, 2400, 4500, DEFAULT_MAX_OUTPUT_TOKENS);
+  return clampNumber(value, 3000, 8000, DEFAULT_MAX_OUTPUT_TOKENS);
 }
 
 function normalizePlain(value) {

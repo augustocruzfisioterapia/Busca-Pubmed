@@ -3,27 +3,35 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#13332d">
-    <meta name="description" content="Tem Evidência? aproxima a prática clínica da PubMed para proteger pacientes do achismo com busca científica, leitura crítica e interpretação por IA.">
-    <title>Tem Evidência? | Protegendo pacientes do eu acho</title>
+    <meta name="theme-color" content="#10231f">
+    <meta name="description" content="Tem Evidência? transforma busca avançada na PubMed e interpretação científica por IA em decisões clínicas melhor fundamentadas. Protegendo pacientes do eu acho.">
+    <meta property="og:title" content="Tem Evidência?">
+    <meta property="og:description" content="Protegendo pacientes do eu acho com busca avançada na PubMed e interpretação científica por IA.">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Tem Evidência?">
+    <meta name="twitter:description" content="Protegendo pacientes do eu acho com evidência científica aplicada à prática clínica.">
+    <title>Tem Evidência? | Protegendo pacientes do “eu acho”</title>
     <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <style>
 :root {
   color-scheme: light;
-  --bg: #eef2ed;
-  --ink: #14201d;
-  --muted: #63736d;
+  --bg: #edf1ee;
+  --ink: #10231f;
+  --muted: #5f706a;
   --panel: #ffffff;
-  --panel-soft: #f7f8f3;
-  --line: #d9e0d8;
-  --accent: #19715d;
-  --accent-dark: #0d4438;
-  --leaf: #d9edbd;
-  --blue: #2f5d7c;
+  --panel-soft: #f7f9f4;
+  --line: #d6dfd8;
+  --accent: #17745f;
+  --accent-dark: #0d3f35;
+  --evidence: #d8b96f;
+  --leaf: #dcefc5;
+  --blue: #315f82;
   --warn: #925b1c;
   --danger: #9b3e3b;
   --ok: #24724d;
-  --shadow: 0 22px 55px rgba(23, 35, 31, 0.1);
+  --shadow: 0 24px 58px rgba(16, 35, 31, 0.11);
   --radius: 8px;
 }
 
@@ -71,10 +79,14 @@ button:disabled {
 
 .hero {
   background:
-    linear-gradient(135deg, rgba(19, 51, 45, 0.97), rgba(21, 77, 63, 0.94)),
-    radial-gradient(circle at top right, rgba(217, 237, 189, 0.42), transparent 34%);
+    linear-gradient(135deg, rgba(16, 35, 31, 0.99) 0%, rgba(18, 69, 58, 0.98) 57%, rgba(22, 91, 76, 0.96) 100%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: auto, 48px 48px, 48px 48px;
   color: #fffdf7;
   padding: 24px;
+  position: relative;
+  overflow: hidden;
 }
 
 .nav-bar,
@@ -89,7 +101,7 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  margin-bottom: 46px;
+  margin-bottom: 40px;
 }
 
 .brand {
@@ -101,36 +113,57 @@ button:disabled {
 .brand-mark {
   display: grid;
   place-items: center;
-  width: 42px;
-  height: 42px;
+  width: 46px;
+  height: 46px;
   border-radius: var(--radius);
-  background: var(--leaf);
-  box-shadow: inset 0 0 0 1px rgba(18, 54, 45, 0.1);
+  background: rgba(255, 253, 247, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 253, 247, 0.18);
 }
 
 .brand-mark svg {
-  width: 42px;
-  height: 42px;
+  width: 46px;
+  height: 46px;
   display: block;
 }
 
-.logo-ring {
-  fill: rgba(255, 253, 247, 0.38);
-  stroke: rgba(18, 54, 45, 0.16);
-  stroke-width: 1;
+.logo-plate {
+  fill: var(--leaf);
+  stroke: rgba(255, 253, 247, 0.48);
+  stroke-width: 1.1;
 }
 
-.logo-leaf {
-  fill: #19715d;
-  opacity: 0.9;
+.logo-paper {
+  fill: rgba(255, 253, 247, 0.72);
+  stroke: rgba(13, 63, 53, 0.32);
+  stroke-width: 1.15;
 }
 
-.logo-pulse {
+.logo-fold {
   fill: none;
-  stroke: #12362d;
-  stroke-width: 2.2;
+  stroke: rgba(13, 63, 53, 0.38);
+  stroke-width: 1.2;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.logo-signal {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.logo-dot {
+  fill: var(--evidence);
+}
+
+.logo-question {
+  fill: var(--accent-dark);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 23px;
+  font-weight: 950;
+  text-anchor: middle;
 }
 
 .brand strong,
@@ -167,28 +200,35 @@ button:disabled {
 
 .search-card {
   display: grid;
-  grid-template-columns: minmax(260px, 0.78fr) minmax(320px, 1.22fr);
-  gap: 34px;
-  align-items: end;
-  padding-bottom: 30px;
+  grid-template-columns: minmax(300px, 0.86fr) minmax(320px, 1.14fr);
+  gap: 42px;
+  align-items: center;
+  padding-bottom: 36px;
+}
+
+.hero-eyebrow {
+  display: block;
+  margin-bottom: 14px;
+  color: var(--evidence);
+  font-size: 0.94rem;
+  font-weight: 900;
 }
 
 .search-copy h1 {
+  max-width: 720px;
   margin: 0;
-}
-
-.search-copy h1 {
-  max-width: 620px;
-  font-size: clamp(1.8rem, 3vw, 3.1rem);
-  line-height: 1.05;
+  color: #fffdf7;
+  font-size: 3.35rem;
+  line-height: 0.98;
+  font-weight: 920;
 }
 
 .search-copy p {
-  max-width: 620px;
-  margin: 12px 0 0;
-  color: rgba(246, 249, 244, 0.86);
-  font-size: 1rem;
-  line-height: 1.5;
+  max-width: 660px;
+  margin: 18px 0 0;
+  color: rgba(246, 249, 244, 0.88);
+  font-size: 1.16rem;
+  line-height: 1.48;
 }
 
 .search-form {
@@ -854,7 +894,7 @@ pre {
 }
 
 .discussion-modal {
-  width: min(720px, 100%);
+  width: min(820px, 100%);
   max-height: min(86vh, 860px);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -869,8 +909,8 @@ pre {
 
 .discussion-body {
   display: grid;
-  gap: 16px;
-  padding: 18px;
+  gap: 18px;
+  padding: 20px;
 }
 
 .discussion-body p {
@@ -883,6 +923,10 @@ pre {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.discussion-modes button.active {
+  box-shadow: inset 0 -3px 0 rgba(216, 185, 111, 0.9);
 }
 
 .discussion-placeholder {
@@ -898,11 +942,11 @@ pre {
 
 .discussion-card {
   display: grid;
-  gap: 12px;
+  gap: 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: #fff;
-  padding: 14px;
+  padding: 16px;
 }
 
 .discussion-card.is-highlighted {
@@ -932,8 +976,8 @@ pre {
 }
 
 .discussion-card h3 {
-  margin: 10px 0 0;
-  font-size: 1rem;
+  margin: 12px 0 0;
+  font-size: 1.04rem;
   color: var(--ink);
 }
 
@@ -965,6 +1009,8 @@ pre {
 
   .search-copy h1 {
     max-width: 760px;
+    font-size: 2.85rem;
+    line-height: 1.03;
   }
 
   .article {
@@ -1005,6 +1051,34 @@ pre {
     align-items: flex-start;
     flex-direction: column;
     margin-bottom: 28px;
+  }
+
+  .brand-mark {
+    width: 42px;
+    height: 42px;
+  }
+
+  .brand-mark svg {
+    width: 42px;
+    height: 42px;
+  }
+
+  .brand span {
+    font-size: 0.8rem;
+  }
+
+  .search-card {
+    gap: 24px;
+    padding-bottom: 22px;
+  }
+
+  .search-copy h1 {
+    font-size: 2.25rem;
+    line-height: 1.04;
+  }
+
+  .search-copy p {
+    font-size: 1rem;
   }
 
   .nav-actions,
@@ -1052,10 +1126,13 @@ pre {
         <nav class="nav-bar" aria-label="Principal">
           <div class="brand">
             <div class="brand-mark" aria-hidden="true">
-              <svg viewBox="0 0 42 42" role="img" focusable="false">
-                <circle cx="21" cy="21" r="18" class="logo-ring"></circle>
-                <path class="logo-leaf" d="M22.5 27.8c6.1-.7 10.2-5.2 10.6-11.6-6.6-.1-11.1 3.7-12.2 9.8 2.5-2.8 5.3-4.8 8.6-6.1-3.2 2.1-5.8 4.8-7 7.9Z"></path>
-                <path class="logo-pulse" d="M8.8 23.1h6.1l2.4-5.9 4.2 12.1 2.2-6.2h9.5"></path>
+              <svg viewBox="0 0 48 48" role="img" focusable="false">
+                <rect x="4" y="4" width="40" height="40" rx="11" class="logo-plate"></rect>
+                <path class="logo-paper" d="M15 14.5h13.2l4.8 4.8v14.2H15z"></path>
+                <path class="logo-fold" d="M28.2 14.5v5h4.8"></path>
+                <path class="logo-signal" d="M18 30l4.6-5.2 4.2 3.2 5.2-8"></path>
+                <circle cx="32" cy="20" r="2" class="logo-dot"></circle>
+                <text x="23.5" y="30.5" class="logo-question">?</text>
               </svg>
             </div>
             <div>
@@ -1070,8 +1147,9 @@ pre {
 
         <section class="search-card" aria-label="Busca de artigos">
           <div class="search-copy">
-            <h1>Tem Evidência?</h1>
-            <p>Busca avançada na PubMed para transformar ciência em decisão clínica melhor fundamentada.</p>
+            <span class="hero-eyebrow">Busca avançada na PubMed</span>
+            <h1>Protegendo pacientes do “eu acho”.</h1>
+            <p>Transformando evidência científica em decisões clínicas melhor fundamentadas.</p>
           </div>
 
           <form id="search-form" class="search-form">
@@ -1193,7 +1271,7 @@ pre {
           <div class="result-actions">
             <button id="copy-query" class="secondary-button compact-button" type="button">Copiar query</button>
             <button id="copy-doi-list" class="secondary-button compact-button" type="button">Copiar lista de DOI</button>
-            <button id="discuss-evidence" class="secondary-button discuss-button" type="button">Interpretar com IA</button>
+            <button id="discuss-evidence" class="secondary-button discuss-button" type="button">Discutir evidências</button>
           </div>
         </section>
         <p class="ranking-note" id="ranking-note" hidden>O ranking é uma organização auxiliar baseada nos metadados disponíveis no PubMed e não substitui avaliação crítica metodológica completa.</p>
@@ -1225,12 +1303,12 @@ pre {
           <button id="close-discussion" type="button">Fechar</button>
         </div>
         <div class="discussion-body">
-          <p>A IA gera quatro leituras em uma única chamada: decisão clínica, crítica científica, ensino e comunicação. A análise usa apenas os artigos retornados pela busca.</p>
+          <p>O Tem Evidência? gera quatro leituras em uma única chamada: decisão clínica, crítica científica, ensino e comunicação. A análise usa apenas os artigos retornados pela busca.</p>
           <div class="discussion-modes" role="group" aria-label="Modo de análise">
-            <button type="button" data-mode="clinico">Clínico</button>
-            <button type="button" data-mode="pesquisador">Pesquisador</button>
-            <button type="button" data-mode="professor">Professor</button>
-            <button type="button" data-mode="criador_conteudo">Criador de Conteúdo</button>
+            <button type="button" data-mode="clinico" title="Foco em decisão prática e segurança do paciente">Clínico</button>
+            <button type="button" data-mode="pesquisador" title="Foco em validade científica, vieses e metodologia">Pesquisador</button>
+            <button type="button" data-mode="professor" title="Foco em explicação progressiva e ensino">Professor</button>
+            <button type="button" data-mode="criador_conteudo" title="Foco em comunicação, hooks e cautelas">Criador de Conteúdo</button>
           </div>
           <div id="discussion-placeholder" class="discussion-placeholder" hidden></div>
           <div id="discussion-result" class="discussion-result" hidden></div>
@@ -1741,7 +1819,7 @@ async function requestEvidenceDiscussion() {
   }
 
   discussionInFlight = true;
-  setDiscussionBusy(true, "Gerando quatro interpretações...", "A IA está criando os modos Clínico, Pesquisador, Professor e Criador de Conteúdo em uma única chamada.");
+  setDiscussionBusy(true, "Gerando discussão aprofundada...", "A IA está criando os modos Clínico, Pesquisador, Professor e Criador de Conteúdo em uma única chamada, com foco diferente para cada perfil.");
   try {
     // Envia somente dados recuperados na busca atual; o backend aplica a selecao e as regras anti-extrapolacao.
     const payload = {
@@ -1858,7 +1936,7 @@ function renderDiscussionStack(options = {}) {
   } else if (!bundle?.analyses) {
     renderDiscussionMessage(
       "Escolha um modo de análise.",
-      "Ao iniciar, a IA gera os quatro modos em uma única chamada e depois você alterna a visualização sem custo adicional."
+      "Ao iniciar, a IA gera os quatro modos em uma única chamada aprofundada e depois você alterna a visualização sem custo adicional."
     );
   } else {
     discussionPlaceholder.hidden = true;

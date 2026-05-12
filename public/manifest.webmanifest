@@ -1,9 +1,16 @@
 {
-  "name": "Tem Evidencia?",
-  "short_name": "Tem Evidencia?",
+  "name": "Tem Evidência?",
+  "short_name": "Tem Evidência?",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#f4f1eb",
+  "background_color": "#edf1ee",
   "theme_color": "#10231f",
-  "icons": []
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
 }
