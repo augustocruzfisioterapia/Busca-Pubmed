@@ -39,6 +39,8 @@ services:
         value: https://www.temevidencia.com.br,https://temevidencia.com.br,https://busca-pubmed.onrender.com,https://augustocruzfisioterapia.github.io
       - key: GA_MEASUREMENT_ID
         value: G-N0QQY69DTE
+      - key: GA_API_SECRET
+        sync: false
       - key: ADMIN_METRICS_TOKEN
         sync: false
       - key: NCBI_EMAIL

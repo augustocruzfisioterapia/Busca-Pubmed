@@ -74,6 +74,7 @@ NCBI_API_KEY=sua-chave-ncbi
 UNPAYWALL_EMAIL=seu-email-de-contato
 OPENAI_API_KEY=sua-chave-openai
 GA_MEASUREMENT_ID=G-N0QQY69DTE
+GA_API_SECRET=sua-chave-measurement-protocol
 ADMIN_METRICS_TOKEN=crie-um-token-longo
 ```
 
@@ -81,7 +82,9 @@ ADMIN_METRICS_TOKEN=crie-um-token-longo
 
 `OPENAI_API_KEY` habilita o painel de interpretacao por IA. Sem essa variavel, a busca continua funcionando normalmente e apenas a interpretacao por IA fica indisponivel.
 
-`GA_MEASUREMENT_ID` habilita Google Analytics 4 no frontend. O app tambem registra metricas internas agregadas em memoria, sem armazenar termos de busca, PMID, DOI, IP ou dados pessoais. O dashboard basico fica em `/admin/metrics?token=SEU_TOKEN`, usando `ADMIN_METRICS_TOKEN`.
+`GA_MEASUREMENT_ID` habilita Google Analytics 4 no frontend. `GA_API_SECRET` habilita o fallback server-side oficial do GA4 Measurement Protocol para reduzir perda de eventos por adblock ou bloqueios do navegador. Gere essa chave no GA4 em `Admin` > `Fluxos de dados` > `Web` > selecione o stream > `Measurement Protocol API secrets`.
+
+O app tambem registra metricas internas agregadas em memoria, sem armazenar termos de busca, PMID, DOI, IP ou dados pessoais. O dashboard basico fica em `/admin/metrics?token=SEU_TOKEN`, usando `ADMIN_METRICS_TOKEN`.
 
 O plano gratuito serve para teste publico inicial, mas pode entrar em modo de espera quando fica sem acesso. Para uma ferramenta publica com uso real, use um plano sempre ativo.
 
@@ -152,6 +155,7 @@ RATE_LIMIT_AI_MAX=6
 MAX_BODY_SIZE=1000000
 ALLOWED_ORIGIN=https://www.temevidencia.com.br,https://temevidencia.com.br,https://busca-pubmed.onrender.com,http://localhost:3000,http://localhost:4173,http://localhost:5173
 GA_MEASUREMENT_ID=G-N0QQY69DTE
+GA_API_SECRET=
 ADMIN_METRICS_TOKEN=
 ```
 
@@ -159,6 +163,7 @@ ADMIN_METRICS_TOKEN=
 
 - GA4 e carregado somente quando `GA_MEASUREMENT_ID` esta configurado.
 - Eventos enviados: busca realizada, artigo aberto, perfil de IA selecionado, discussao IA gerada, erro de busca e erro de IA.
+- Com `GA_API_SECRET`, os mesmos eventos tambem sao reenviados pelo backend via Measurement Protocol com `session_id` e `engagement_time_msec`, aumentando a chance de aparecerem no Realtime e DebugView.
 - A camada interna registra apenas contadores agregados: acessos, buscas, uso da IA, cache hits/misses, custo estimado, tempo medio e endpoints mais usados.
 - Em producao, proteja o dashboard com `ADMIN_METRICS_TOKEN`.
 

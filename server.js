@@ -122,13 +122,15 @@ const server = http.createServer(async (req, res) => {
 
     if (routePath === "/api/metrics/event" && req.method === "POST") {
       const body = await readJsonBody(req);
+      const analyticsEvent = normalizeAnalyticsEvent(body);
       recordClientEvent({
-        name: body.name || body.event || "",
-        params: body.params || {},
-        path: body.path || "/",
-        timestamp: body.timestamp || ""
+        name: analyticsEvent.name,
+        params: analyticsEvent.params,
+        path: analyticsEvent.path,
+        timestamp: analyticsEvent.timestamp
       });
-      return sendJson(req, res, 200, { ok: true });
+      const ga4 = await forwardGa4MeasurementEvent(analyticsEvent);
+      return sendJson(req, res, 200, { ok: true, ga4 });
     }
 
     if (routePath === "/api/resolve-terms" && req.method === "POST") {
@@ -434,6 +436,115 @@ function clientConfigScript() {
     `window.BUSCA_PUBMED_GA_MEASUREMENT_ID = ${JSON.stringify(gaMeasurementId)};`,
     "window.BUSCA_PUBMED_INTERNAL_ANALYTICS = true;"
   ].join("\n");
+}
+
+function normalizeAnalyticsEvent(body = {}) {
+  return {
+    name: normalizeAnalyticsName(body.name || body.event || ""),
+    params: sanitizeGa4Params(body.params || {}),
+    clientId: normalizeAnalyticsClientId(body.clientId),
+    sessionId: normalizeAnalyticsSessionId(body.sessionId),
+    debugMode: Boolean(body.debugMode),
+    path: String(body.path || "/").slice(0, 160),
+    timestamp: normalizeAnalyticsTimestamp(body.timestamp)
+  };
+}
+
+async function forwardGa4MeasurementEvent(event) {
+  const measurementId = process.env.GA_MEASUREMENT_ID || process.env.GOOGLE_ANALYTICS_ID || "";
+  const apiSecret = process.env.GA_API_SECRET || process.env.GA4_API_SECRET || "";
+  if (!measurementId || !apiSecret || !event.name) {
+    return {
+      attempted: false,
+      reason: !measurementId ? "GA_MEASUREMENT_ID ausente" : !apiSecret ? "GA_API_SECRET ausente" : "evento invalido"
+    };
+  }
+
+  const url = new URL("https://www.google-analytics.com/mp/collect");
+  url.searchParams.set("measurement_id", measurementId);
+  url.searchParams.set("api_secret", apiSecret);
+
+  const body = {
+    client_id: event.clientId,
+    events: [
+      {
+        name: event.name,
+        params: {
+          ...event.params,
+          session_id: event.sessionId,
+          engagement_time_msec: 1,
+          debug_mode: event.debugMode
+        }
+      }
+    ]
+  };
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(2500)
+    });
+    return {
+      attempted: true,
+      ok: response.ok,
+      status: response.status
+    };
+  } catch (error) {
+    console.warn("[ga4-forward-error]", {
+      event: event.name,
+      message: error.message
+    });
+    return {
+      attempted: true,
+      ok: false,
+      error: "Falha ao reenviar evento ao GA4."
+    };
+  }
+}
+
+function normalizeAnalyticsName(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 40);
+}
+
+function sanitizeGa4Params(params = {}) {
+  const safe = {};
+  for (const [key, value] of Object.entries(params || {})) {
+    const normalizedKey = normalizeAnalyticsName(key);
+    if (!normalizedKey || isSensitiveAnalyticsParam(normalizedKey)) continue;
+    if (typeof value === "boolean") safe[normalizedKey] = value;
+    if (typeof value === "number" && Number.isFinite(value)) safe[normalizedKey] = value;
+    if (typeof value === "string") safe[normalizedKey] = value.slice(0, 120);
+  }
+  return safe;
+}
+
+function isSensitiveAnalyticsParam(key) {
+  if (key === "page_title") return false;
+  return /search|query|term|title|abstract|doi|pmid|email|token|key|secret|patient|nome/.test(key);
+}
+
+function normalizeAnalyticsClientId(value) {
+  const clean = String(value || "").replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 80);
+  return clean || `server-${Date.now()}`;
+}
+
+function normalizeAnalyticsSessionId(value) {
+  const clean = String(value || "").replace(/\D/g, "").slice(0, 20);
+  return clean || String(Math.floor(Date.now() / 1000));
+}
+
+function normalizeAnalyticsTimestamp(value) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return new Date().toISOString();
+  return date.toISOString();
 }
 
 function isAdminMetricsAuthorized(req) {

@@ -46,6 +46,8 @@ const configuredApiBase = normalizeApiBase(window.BUSCA_PUBMED_API_BASE || "");
 const gaMeasurementId = normalizeAnalyticsId(window.BUSCA_PUBMED_GA_MEASUREMENT_ID || "");
 const internalAnalyticsEnabled = window.BUSCA_PUBMED_INTERNAL_ANALYTICS !== false;
 const analyticsDebugMode = isAnalyticsDebugMode();
+const analyticsClientId = getAnalyticsClientId();
+const analyticsSessionId = getAnalyticsSessionId();
 
 initializeAnalytics();
 trackPageView();
@@ -2065,7 +2067,7 @@ function trackPageView() {
 function trackAnalyticsDebugEvent() {
   if (!analyticsDebugMode) return;
   trackEvent("teste_tem_evidencia", {
-    origem: isProductionHost() ? "site_producao" : "ambiente_local"
+    origem: isProductionHost() ? "producao" : "local"
   });
 }
 
@@ -2099,6 +2101,9 @@ function recordInternalAnalyticsEvent(name, params = {}) {
   const body = JSON.stringify({
     name,
     params,
+    clientId: analyticsClientId,
+    sessionId: analyticsSessionId,
+    debugMode: analyticsDebugMode,
     path: window.location.pathname || "/",
     timestamp: new Date().toISOString()
   });
@@ -2132,6 +2137,32 @@ function sanitizeAnalyticsParams(params = {}) {
 function normalizeAnalyticsId(value) {
   const normalized = String(value || "").trim();
   return /^G-[A-Z0-9]+$/i.test(normalized) ? normalized : "";
+}
+
+function getAnalyticsClientId() {
+  const key = "tem-evidencia-analytics-client-id";
+  try {
+    const existing = localStorage.getItem(key);
+    if (existing) return existing;
+    const created = crypto.randomUUID ? crypto.randomUUID() : `client-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(key, created);
+    return created;
+  } catch {
+    return `client-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+}
+
+function getAnalyticsSessionId() {
+  const key = "tem-evidencia-analytics-session-id";
+  try {
+    const existing = sessionStorage.getItem(key);
+    if (existing) return existing;
+    const created = String(Math.floor(Date.now() / 1000));
+    sessionStorage.setItem(key, created);
+    return created;
+  } catch {
+    return String(Math.floor(Date.now() / 1000));
+  }
 }
 
 function isAnalyticsDebugMode() {
